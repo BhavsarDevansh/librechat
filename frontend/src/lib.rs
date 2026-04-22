@@ -4,7 +4,9 @@ use wasm_bindgen::prelude::*;
 #[component]
 pub fn App() -> impl IntoView {
     view! {
-        <p>"Hello from Leptos!"</p>
+        <div class="app-root">
+            <p>"Hello from Leptos!"</p>
+        </div>
     }
 }
 
