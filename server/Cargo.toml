@@ -1,6 +1,6 @@
 [package]
 name = "server"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -13,3 +13,4 @@ tower-http = { workspace = true }
 
 [dev-dependencies]
 toml = "0.8"
+regex = "1"
