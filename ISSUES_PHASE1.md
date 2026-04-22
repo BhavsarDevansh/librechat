@@ -10,9 +10,11 @@
 **Labels:** `mcp`, `enhancement`
 
 ### Summary
+
 Implement the concrete `OpenAiProvider` struct that satisfies the `LlmProvider` trait from issue #5. This issue covers the **non-streaming** chat completion path — sending a `POST /v1/chat/completions` request with `stream: false` and returning the full response.
 
 ### Requirements
+
 - Create `server/src/providers/openai.rs` containing the `OpenAiProvider` struct.
 - `OpenAiProvider` holds:
   - `client: reqwest::Client` — reuse a single client instance across requests (connection pooling).
@@ -35,7 +37,9 @@ Implement the concrete `OpenAiProvider` struct that satisfies the `LlmProvider` 
 - Add `reqwest = { version = "0.12", features = ["json", "stream"] }` to `server/Cargo.toml` if not already present.
 
 ### Key Code References (Context7-verified)
+
 Non-streaming request with reqwest:
+
 ```rust
 let response = self.client
     .post(format!("{}/v1/chat/completions", self.base_url))
@@ -44,9 +48,11 @@ let response = self.client
     .send()
     .await
     .map_err(|e| ProviderError::ConnectionFailed(e.to_string()))?;
+
 ```
 
 ### Acceptance Criteria
+
 - [ ] `cargo build -p server` compiles with the new provider
 - [ ] `OpenAiProvider::from_env()` reads environment variables correctly
 - [ ] Non-streaming request to a running Ollama instance returns a valid `ChatCompletionResponse`
@@ -55,6 +61,7 @@ let response = self.client
 - [ ] `chat_completion_stream()` returns an error (stub for now)
 
 ### Notes
+
 - This provider works with both Ollama and OpenAI because both implement the `/v1/chat/completions` endpoint. The only difference is `base_url` and `api_key`.
 - Future work: Add an Ollama-native provider (using `/api/chat`) for features not available in the OpenAI-compatible endpoint.
 
@@ -65,9 +72,11 @@ let response = self.client
 **Labels:** `mcp`, `streaming`, `enhancement`
 
 ### Summary
+
 Implement the `chat_completion_stream()` method on `OpenAiProvider`. This streams token-level responses from the LLM provider using Server-Sent Events (SSE), returning chunks via a `tokio::sync::mpsc` channel as they arrive.
 
 ### Requirements
+
 - Update `OpenAiProvider::chat_completion_stream()` to:
   - Send `POST {base_url}/v1/chat/completions` with `"stream": true` in the request body.
   - Read the response body as a byte stream using `reqwest::Response::bytes_stream()`.
@@ -81,7 +90,9 @@ Implement the `chat_completion_stream()` method on `OpenAiProvider`. This stream
 - Add `tokio-stream` to dependencies if needed for stream utilities.
 
 ### Key Code References (Context7-verified)
+
 Streaming response with reqwest:
+
 ```rust
 use futures_util::StreamExt;
 
@@ -90,18 +101,23 @@ while let Some(chunk) = stream.next().await {
     let chunk = chunk.map_err(|e| ProviderError::ConnectionFailed(e.to_string()))?;
     // accumulate into a line buffer, parse SSE lines
 }
+
 ```
 
 SSE format (from OpenAI / Ollama):
+
 ```
+
 data: {"id":"chatcmpl-123","choices":[{"delta":{"content":"Hello"}}]}
 
 data: {"id":"chatcmpl-123","choices":[{"delta":{"content":" world"}}]}
 
 data: [DONE]
+
 ```
 
 ### Acceptance Criteria
+
 - [ ] `chat_completion_stream()` returns a `mpsc::Receiver` that yields `Ok(ChatCompletionChunk)` items
 - [ ] Partial SSE lines that span multiple TCP chunks are correctly reassembled
 - [ ] `data: [DONE]` closes the channel gracefully
@@ -110,6 +126,7 @@ data: [DONE]
 - [ ] `cargo build -p server` compiles without warnings
 
 ### Notes
+
 - The SSE parser must handle the `\n\n` delimiter between events and the `data: ` prefix on each line.
 - Empty lines between events should be ignored.
 - The `mpsc` channel buffer size of 32 is a starting point; it can be tuned based on performance testing.
@@ -121,9 +138,11 @@ data: [DONE]
 **Labels:** `server`, `enhancement`
 
 ### Summary
+
 Create an Axum route `POST /api/chat/completions` that accepts chat messages from the frontend, forwards them to the configured `LlmProvider`, and returns the complete response as JSON.
 
 ### Requirements
+
 - Create `server/src/routes/chat.rs` with the handler.
 - Define the request body type (can reuse `ChatCompletionRequest` from `providers::types`):
   ```rust
@@ -135,6 +154,7 @@ Create an Axum route `POST /api/chat/completions` that accepts chat messages fro
       pub temperature: Option<f64>,
   }
   ```
+
 - The handler should:
   1. Extract `AppState` via `axum::extract::State`.
   2. Read the `ChatRequest` from the request body.
@@ -146,6 +166,7 @@ Create an Axum route `POST /api/chat/completions` that accepts chat messages fro
 - Store the `OpenAiProvider` (as `Box<dyn LlmProvider>`) in `AppState`.
 
 ### Key Code References (Context7-verified)
+
 ```rust
 use axum::{extract::State, Json};
 use crate::state::AppState;
@@ -170,9 +191,11 @@ async fn chat_completion_handler(
         })?;
     Ok(Json(response))
 }
+
 ```
 
 ### Acceptance Criteria
+
 - [ ] `POST /api/chat/completions` with valid messages returns `200 OK` with a `ChatCompletionResponse`
 - [ ] Missing or malformed request body returns `400 Bad Request`
 - [ ] Upstream provider errors return `502 Bad Gateway`
@@ -180,6 +203,7 @@ async fn chat_completion_handler(
 - [ ] `AppState` holds the provider as `Box<dyn LlmProvider>`
 
 ### Notes
+
 - This issue covers the non-streaming route only. The streaming route is a separate issue.
 - CORS must already be configured (issue #3) so the frontend can call this endpoint.
 
@@ -190,9 +214,11 @@ async fn chat_completion_handler(
 **Labels:** `server`, `streaming`, `enhancement`
 
 ### Summary
+
 Create an Axum route `POST /api/chat/completions/stream` that accepts chat messages and returns an SSE stream of `ChatCompletionChunk` objects, enabling real-time token delivery to the frontend.
 
 ### Requirements
+
 - Create `server/src/routes/chat_stream.rs` with the handler.
 - Use Axum's SSE support (`axum::response::sse::Sse`) to stream `ChatCompletionChunk` objects.
 - The handler should:
@@ -207,6 +233,7 @@ Create an Axum route `POST /api/chat/completions/stream` that accepts chat messa
 - Ensure the SSE response has headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`. (Axum's `Sse` sets these automatically.)
 
 ### Key Code References (Context7-verified)
+
 ```rust
 use axum::response::sse::{Event, Sse};
 use futures_util::stream::Stream;
@@ -227,9 +254,11 @@ async fn chat_stream_handler(
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
+
 ```
 
 ### Acceptance Criteria
+
 - [ ] `POST /api/chat/completions/stream` returns `200 OK` with `Content-Type: text/event-stream`
 - [ ] Each SSE event is a JSON-encoded `ChatCompletionChunk`
 - [ ] The stream ends gracefully when the provider sends `[DONE]`
@@ -238,6 +267,7 @@ async fn chat_stream_handler(
 - [ ] Connection errors return `502 Bad Gateway`
 
 ### Notes
+
 - The non-streaming `POST /api/chat/completions` route must already exist (issue #8).
 - The frontend SSE integration is a separate issue.
 
@@ -248,9 +278,11 @@ async fn chat_stream_handler(
 **Labels:** `ui`, `enhancement`
 
 ### Summary
+
 Build the visual components for the chat interface using Leptos CSR and traditional CSS: a scrollable message list area and a text input with a send button. This issue covers the UI only — API integration is a separate issue.
 
 ### Requirements
+
 - Create the following Leptos components in `frontend/src/`:
   - `app.rs` — Root `App` component that composes `ChatView` and holds the application state.
   - `chat_view.rs` — Main chat container with flex column layout.
@@ -265,6 +297,7 @@ Build the visual components for the chat interface using Leptos CSR and traditio
       pub content: String,
   }
   ```
+
 - The `App` component should hold `messages: RwSignal<Vec<Message>>` and `input_text: RwSignal<String>`.
 - Clicking "Send" (or pressing Enter) should:
   1. Append the input text as a `Message { role: MessageRole::User, content: input_text }` to the messages signal.
@@ -282,6 +315,7 @@ Build the visual components for the chat interface using Leptos CSR and traditio
 - The textarea should auto-resize based on content (up to a max height).
 
 ### Acceptance Criteria
+
 - [ ] `trunk serve` displays a full-viewport chat layout with dark theme
 - [ ] Typing a message and clicking Send (or pressing Enter) appends a user message bubble
 - [ ] User messages appear right-aligned, assistant placeholders left-aligned
@@ -291,6 +325,7 @@ Build the visual components for the chat interface using Leptos CSR and traditio
 - [ ] All styles use CSS custom properties from `main.css` — no Tailwind
 
 ### Notes
+
 - This issue is UI-only. The assistant response will always show "Thinking..." until API integration is added in issues #11 and #12.
 - Do NOT use Tailwind CSS. All styling is in traditional CSS stylesheets.
 - The auto-resize textarea can use a simple `input` event handler that sets `el.style.height = "auto"; el.style.height = el.scrollHeight + "px"`.
@@ -302,9 +337,11 @@ Build the visual components for the chat interface using Leptos CSR and traditio
 **Labels:** `ui`, `mcp`, `enhancement`
 
 ### Summary
+
 Wire the Leptos chat UI to the non-streaming `POST /api/chat/completions` endpoint. When the user sends a message, the frontend sends the full conversation history to the backend and displays the assistant's response.
 
 ### Requirements
+
 - Add `gloo-net` (or `reqwasm`) to `frontend/Cargo.toml` as a dependency for making HTTP requests from WASM.
 - Add `serde` and `serde_json` to `frontend/Cargo.toml` for request/response serialization.
 - Create `frontend/src/api.rs` with functions:
@@ -314,6 +351,7 @@ Wire the Leptos chat UI to the non-streaming `POST /api/chat/completions` endpoi
       model: Option<String>,
   ) -> Result<ChatCompletionResponse, String>
   ```
+
   - Builds the request body matching the server's `ChatRequest` schema.
   - Sends `POST /api/chat/completions` using `gloo_net::http::Request`.
   - Deserializes the JSON response into `ChatCompletionResponse`.
@@ -331,6 +369,7 @@ Wire the Leptos chat UI to the non-streaming `POST /api/chat/completions` endpoi
 - The API base URL should default to `""` (same origin) and be overridable via a `window.__LIBRECHAT_API_URL__` JS global or similar mechanism.
 
 ### Acceptance Criteria
+
 - [ ] Sending a message in the UI calls `POST /api/chat/completions`
 - [ ] The assistant message bubble updates with the full response text
 - [ ] The send button and textarea are disabled while the request is in-flight
@@ -339,6 +378,7 @@ Wire the Leptos chat UI to the non-streaming `POST /api/chat/completions` endpoi
 - [ ] `cargo build -p frontend --target wasm32-unknown-unknown` compiles without errors
 
 ### Notes
+
 - This is the simpler integration path. Streaming (issue #12) will replace this for a better UX.
 - The `model` field can be hardcoded to `"llama3"` for now — model selection UI comes in Phase 2.
 
@@ -349,9 +389,11 @@ Wire the Leptos chat UI to the non-streaming `POST /api/chat/completions` endpoi
 **Labels:** `ui`, `streaming`, `enhancement`
 
 ### Summary
+
 Replace the non-streaming chat integration with SSE streaming so that tokens appear in real-time as they are generated by the LLM. The frontend connects to `POST /api/chat/completions/stream` and updates the assistant message incrementally.
 
 ### Requirements
+
 - Add `gloo-net` (or `reqwasm`) streaming support — ensure the `http` feature is enabled for response body streaming.
 - Create `frontend/src/api.rs` function:
   ```rust
@@ -361,6 +403,7 @@ Replace the non-streaming chat integration with SSE streaming so that tokens app
       on_chunk: impl Fn(ChatCompletionChunk),
   ) -> Result<(), String>
   ```
+
 - The streaming function should:
   1. Send `POST /api/chat/completions/stream` with `Content-Type: application/json`.
   2. Read the response body as an SSE stream.
@@ -383,6 +426,7 @@ Replace the non-streaming chat integration with SSE streaming so that tokens app
 - Remove or deprecate the non-streaming `send_chat_request` function (keep it for fallback if desired).
 
 ### Acceptance Criteria
+
 - [ ] Sending a message streams tokens in real-time to the UI
 - [ ] The assistant message updates character-by-character as chunks arrive
 - [ ] The "Thinking..." animation is replaced by the streamed text immediately
@@ -392,6 +436,7 @@ Replace the non-streaming chat integration with SSE streaming so that tokens app
 - [ ] No memory leaks from unclosed streams on rapid message sending (cancel previous stream if new message is sent)
 
 ### Notes
+
 - `gloo-net` supports streaming response bodies via `Response::body()` which returns a `web_sys::ReadableStream`. The SSE parsing must be done in JS/WASM since there's no native SSE client in Rust for the browser.
 - Consider using `web_sys::EventSource` as an alternative — but it only supports `GET` requests. Since our endpoint is `POST`, we must parse the SSE stream manually from the fetch response body.
 - This issue supersedes the non-streaming integration from issue #11 for the primary UX, but the non-streaming endpoint remains available as a fallback.
