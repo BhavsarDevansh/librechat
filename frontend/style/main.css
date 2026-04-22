@@ -92,6 +92,7 @@ a:focus-visible {
 /* Scrollable message area — fills remaining vertical space */
 .scroll-area {
   flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-md);
 }
