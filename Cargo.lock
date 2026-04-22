@@ -1967,6 +1967,7 @@ name = "server"
 version = "0.2.0"
 dependencies = [
  "axum",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

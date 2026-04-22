@@ -13,3 +13,4 @@ tower-http = { workspace = true }
 
 [dev-dependencies]
 toml = "0.8"
+regex = "1"

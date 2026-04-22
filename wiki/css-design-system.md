@@ -23,11 +23,9 @@ The design system gives the chat interface a **dark theme by default**, with a c
    | What you need | Class to use |
    |---|---|
    | Full-height app shell | `.app-root` |
-   | Scrollable message area | `.scroll-area` or `.message-list` |
+   | Full-height flex column | `.flex-column-full` |
+   | Scrollable message area | `.scroll-area` |
    | Sticky bottom input bar | `.sticky-input` |
-   | Chat input row | `.chat-input` |
-   | User message bubble | `.message-bubble .message-bubble--user` |
-   | Assistant message bubble | `.message-bubble .message-bubble--assistant` |
    | Visually hidden but accessible text | `.sr-only` |
 
 3. **Adding new styles**: Create new classes in `frontend/style/main.css` (or a new `.css` file added to `index.html`).

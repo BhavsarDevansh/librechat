@@ -13,7 +13,7 @@ The LibreChat frontend uses **traditional CSS stylesheets** — no CSS framework
 
 ### File Layout
 
-```
+```text
 frontend/
 ├── index.html          ← references main.css via Trunk link tag
 ├── style/
@@ -37,7 +37,7 @@ All visual constants are defined as CSS custom properties in `:root` inside `mai
 | `--color-text-secondary` | `#9ca3af` | Muted/secondary text |
 | `--color-accent` | `#3b82f6` | Accent/brand colour (blue) |
 | `--color-accent-hover` | `#2563eb` | Accent hover state |
-| `--color-border` | `4b5563` | Border colour |
+| `--color-border` | `#4b5563` | Border colour |
 | `--font-sans` | `system-ui, -apple-system, sans-serif` | Body font stack |
 | `--font-mono` | `ui-monospace, "Cascadia Code", "Fira Code", monospace` | Code block font stack |
 | `--radius-sm` | `0.25rem` | Small border radius |
@@ -62,11 +62,11 @@ Additional tokens for spacing (`--space-*`), shadows (`--shadow-*`), and transit
 | `.flex-column-full` | Generic full-height flex column |
 | `.scroll-area` | Flex-grow scrollable region (for message history) |
 | `.sticky-input` | Flex-shrink pinned bottom bar (for chat input) |
-| `.message-list` | Vertical flex list with gaps for chat messages |
-| `.message-bubble` | Base message bubble styling |
-| `.message-bubble--user` | Right-aligned user message (accent background) |
-| `.message-bubble--assistant` | Left-aligned assistant message (secondary background) |
-| `.chat-input` | Flex row with textarea and send button |
+| `.message-list` | Vertical flex list with gaps for chat messages *(planned)* |
+| `.message-bubble` | Base message bubble styling *(planned)* |
+| `.message-bubble--user` | Right-aligned user message (accent background) *(planned)* |
+| `.message-bubble--assistant` | Left-aligned assistant message (secondary background) *(planned)* |
+| `.chat-input` | Flex row with textarea and send button *(planned)* |
 | `.sr-only` | Screen-reader-only hidden text |
 
 ## API Reference
