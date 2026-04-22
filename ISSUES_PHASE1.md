@@ -34,7 +34,7 @@ Implement the concrete `OpenAiProvider` struct that satisfies the `LlmProvider` 
   - `LLM_BASE_URL` (default: `http://localhost:11434`)
   - `LLM_API_KEY` (optional)
   - `LLM_MODEL` (default: `llama3`)
-- Add `reqwest = { version = "0.12", features = ["json", "stream"] }` to `server/Cargo.toml` if not already present.
+- Add `reqwest = { workspace = true, features = ["json", "stream"] }` to `server/Cargo.toml` if not already present.
 
 ### Key Code References (Context7-verified)
 
@@ -80,7 +80,7 @@ Implement the `chat_completion_stream()` method on `OpenAiProvider`. This stream
 - Update `OpenAiProvider::chat_completion_stream()` to:
   - Send `POST {base_url}/v1/chat/completions` with `"stream": true` in the request body.
   - Read the response body as a byte stream using `reqwest::Response::bytes_stream()`.
-  - Parse the SSE format: each line starting with `data: ` contains a JSON `ChatCompletionChunk`. Lines starting with `data: [DONE]` signal end of stream.
+  - Parse the SSE format: each line starting with `data:` contains a JSON `ChatCompletionChunk`. Lines starting with `data: [DONE]` signal end of stream.
   - Buffer partial lines (a single SSE event may be split across multiple TCP chunks).
   - Send each parsed `ChatCompletionChunk` through a `tokio::sync::mpsc::Sender` (buffer size 32).
   - Send `Ok(chunk)` for successful chunks, `Err(ProviderError)` for parse errors.
@@ -106,8 +106,7 @@ while let Some(chunk) = stream.next().await {
 
 SSE format (from OpenAI / Ollama):
 
-```
-
+```text
 data: {"id":"chatcmpl-123","choices":[{"delta":{"content":"Hello"}}]}
 
 data: {"id":"chatcmpl-123","choices":[{"delta":{"content":" world"}}]}
@@ -127,7 +126,7 @@ data: [DONE]
 
 ### Notes
 
-- The SSE parser must handle the `\n\n` delimiter between events and the `data: ` prefix on each line.
+- The SSE parser must handle the `\n\n` delimiter between events and the `data:` prefix on each line.
 - Empty lines between events should be ignored.
 - The `mpsc` channel buffer size of 32 is a starting point; it can be tuned based on performance testing.
 
@@ -237,6 +236,7 @@ Create an Axum route `POST /api/chat/completions/stream` that accepts chat messa
 ```rust
 use axum::response::sse::{Event, Sse};
 use futures_util::stream::Stream;
+use futures_util::StreamExt;
 
 async fn chat_stream_handler(
     State(state): State<AppState>,
@@ -414,7 +414,7 @@ Replace the non-streaming chat integration with SSE streaming so that tokens app
 - Create a custom SSE parser in `frontend/src/sse.rs`:
   - Buffer incoming text from the response body.
   - Split on `\n\n` boundaries.
-  - For each event block, extract lines starting with `data: `.
+  - For each event block, extract lines starting with `data:`.
   - Skip empty lines and comments (`: ...`).
   - Return parsed events as they complete.
 - Update `ChatView` to:

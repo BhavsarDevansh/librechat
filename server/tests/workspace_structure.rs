@@ -14,7 +14,7 @@ fn read_root_cargo_toml() -> toml::Value {
 }
 
 #[test]
-fn test_rust_toolchain_toml_exists() {
+fn test_rust_toolchain_toml_fields() {
     let path = workspace_root().join("rust-toolchain.toml");
     assert!(
         path.exists(),
@@ -22,13 +22,23 @@ fn test_rust_toolchain_toml_exists() {
     );
 
     let content = std::fs::read_to_string(&path).expect("failed to read rust-toolchain.toml");
-    assert!(
-        content.contains("stable"),
-        "rust-toolchain.toml should specify the stable channel"
+    let value: toml::Value = toml::from_str(&content).expect("failed to parse rust-toolchain.toml");
+
+    let channel = value["toolchain"]["channel"]
+        .as_str()
+        .expect("toolchain.channel should be a string");
+    assert_eq!(
+        channel, "stable",
+        "rust-toolchain.toml channel should be \"stable\", got \"{channel}\""
     );
+
+    let targets = value["toolchain"]["targets"]
+        .as_array()
+        .expect("toolchain.targets should be an array");
+    let target_names: Vec<&str> = targets.iter().filter_map(|v| v.as_str()).collect();
     assert!(
-        content.contains("wasm32-unknown-unknown"),
-        "rust-toolchain.toml should include the wasm32-unknown-unknown target"
+        target_names.contains(&"wasm32-unknown-unknown"),
+        "rust-toolchain.toml targets should include \"wasm32-unknown-unknown\", got {target_names:?}"
     );
 }
 
@@ -81,13 +91,13 @@ fn test_frontend_cargo_toml_exists() {
 }
 
 #[test]
-fn test_frontend_index_html_exists() {
+fn test_frontend_index_html_has_trunk_tag() {
     let path = workspace_root().join("frontend").join("index.html");
     assert!(path.exists(), "frontend/index.html is missing");
 
     let content = std::fs::read_to_string(&path).expect("failed to read frontend/index.html");
     assert!(
-        content.contains("data-trunk"),
-        "frontend/index.html must contain a Trunk link tag (data-trunk)"
+        content.contains("<link data-trunk rel=\"rust\" data-wasm-cargo=\"frontend\"/>"),
+        "frontend/index.html must contain the Trunk Rust entrypoint tag"
     );
 }
