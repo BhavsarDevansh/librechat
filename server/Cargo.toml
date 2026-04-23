@@ -1,6 +1,6 @@
 [package]
 name = "server"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 
 [dependencies]
@@ -8,9 +8,14 @@ axum = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }
 tower-http = { workspace = true }
 
 [dev-dependencies]
+tower = { workspace = true }
+http-body-util = { workspace = true }
+http = "1"
 toml = "0.8"
 regex = "1"
