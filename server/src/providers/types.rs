@@ -13,7 +13,7 @@ pub struct ChatMessage {
 }
 
 /// Role of a participant in a chat conversation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {
     System,
@@ -93,6 +93,8 @@ pub enum ProviderError {
     ApiError { status: u16, message: String },
     /// The streaming response ended unexpectedly.
     StreamEnded,
+    /// Streaming is not supported by this provider implementation.
+    StreamingNotSupported,
     /// The provider returned a response that could not be parsed.
     InvalidResponse(String),
 }
@@ -103,6 +105,7 @@ impl std::fmt::Display for ProviderError {
             Self::ConnectionFailed(msg) => write!(f, "Connection failed: {msg}"),
             Self::ApiError { status, message } => write!(f, "API error ({status}): {message}"),
             Self::StreamEnded => write!(f, "Stream ended unexpectedly"),
+            Self::StreamingNotSupported => write!(f, "Streaming not supported"),
             Self::InvalidResponse(msg) => write!(f, "Invalid response: {msg}"),
         }
     }

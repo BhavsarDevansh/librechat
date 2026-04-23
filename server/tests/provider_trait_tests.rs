@@ -118,4 +118,7 @@ async fn test_provider_error_display() {
 
     let err = ProviderError::InvalidResponse("bad json".to_string());
     assert_eq!(format!("{err}"), "Invalid response: bad json");
+
+    let err = ProviderError::StreamingNotSupported;
+    assert_eq!(format!("{err}"), "Streaming not supported");
 }
