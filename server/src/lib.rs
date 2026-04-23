@@ -1,8 +1,10 @@
 //! LibreChat server library.
 //!
-//! Exposes the [`app`] constructor, [`AppState`], and [`resolve_port`] for use
-//! by the binary entry point and integration tests alike.
+//! Exposes the [`app`] constructor, [`AppState`], [`resolve_port`], and the
+//! [`providers`] module for use by the binary entry point and integration
+//! tests alike.
 
+pub mod providers;
 pub mod state;
 
 mod routes;

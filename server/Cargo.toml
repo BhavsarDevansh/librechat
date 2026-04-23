@@ -1,6 +1,6 @@
 [package]
 name = "server"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 
 [dependencies]
@@ -12,6 +12,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }
 tower-http = { workspace = true }
+async-trait = { workspace = true }
 
 [dev-dependencies]
 tower = { workspace = true }
