@@ -1,6 +1,6 @@
 [package]
 name = "server"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 
 [dependencies]
@@ -19,3 +19,4 @@ http-body-util = { workspace = true }
 http = "1"
 toml = "0.8"
 regex = "1"
+tempfile = "3"
