@@ -17,11 +17,11 @@ async fn main() {
     let port = resolve_port();
     let addr = format!("0.0.0.0:{port}");
 
-    tracing::info!("Listening on {addr}");
-
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("failed to bind listener");
+
+    tracing::info!("Listening on {addr}");
 
     axum::serve(listener, app(AppState::new()))
         .await
