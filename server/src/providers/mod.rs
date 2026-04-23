@@ -3,8 +3,10 @@
 //! Defines the [`LlmProvider`] trait that all provider backends must implement,
 //! and re-exports the shared request/response types from [`types`].
 
+mod openai;
 mod types;
 
+pub use openai::OpenAiProvider;
 pub use types::*;
 
 use async_trait::async_trait;
