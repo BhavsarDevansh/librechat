@@ -343,12 +343,12 @@ impl LlmProvider for OpenAiProvider {
 
                 buffer.extend_from_slice(&chunk);
 
-                // Process complete SSE events. Each event ends with \n\n.
-                while let Some(pos) = find_event_delimiter(&buffer) {
+                // Process complete SSE events. Each event ends with \n\n or \r\n\r\n.
+                while let Some((pos, delim_len)) = find_event_delimiter(&buffer) {
                     let event_bytes: Vec<u8> =
-                        buffer.drain(..pos + SSE_EVENT_DELIMITER.len()).collect();
-                    // The event bytes include the trailing \n\n — trim them.
-                    let event_bytes = &event_bytes[..event_bytes.len() - SSE_EVENT_DELIMITER.len()];
+                        buffer.drain(..pos + delim_len).collect();
+                    // The event bytes include the trailing delimiter — trim it.
+                    let event_bytes = &event_bytes[..event_bytes.len() - delim_len];
 
                     if event_bytes.is_empty() {
                         continue;
@@ -407,9 +407,16 @@ impl LlmProvider for OpenAiProvider {
 }
 
 /// Find the position of the first SSE event delimiter (`\n\n`) in a byte slice.
-/// Returns the byte index of the start of the delimiter, or `None` if not found.
-fn find_event_delimiter(buffer: &[u8]) -> Option<usize> {
+/// Returns the byte index of the start of the delimiter and its length as (position, length),
+/// or `None` if not found. Detects both "\n\n" and "\r\n\r\n" per the SSE spec.
+fn find_event_delimiter(buffer: &[u8]) -> Option<(usize, usize)> {
+    // Try to find \r\n\r\n first (length 4)
+    if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
+        return Some((pos, 4));
+    }
+    // Fall back to \n\n (length 2)
     buffer
-        .windows(SSE_EVENT_DELIMITER.len())
-        .position(|w| w == SSE_EVENT_DELIMITER)
+        .windows(2)
+        .position(|w| w == b"\n\n")
+        .map(|pos| (pos, 2))
 }
