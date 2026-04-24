@@ -39,9 +39,6 @@ const MAX_ERROR_BODY_BYTES: usize = 4096;
 /// Buffer size for the mpsc channel used to stream chunks to the caller.
 const STREAM_CHANNEL_BUFFER: usize = 32;
 
-/// Byte sequence that marks the end of an SSE event.
-const SSE_EVENT_DELIMITER: &[u8] = b"\n\n";
-
 /// An LLM provider client that speaks the OpenAI Chat Completions API.
 ///
 /// Holds a single [`reqwest::Client`] for connection pooling across requests.
@@ -345,8 +342,7 @@ impl LlmProvider for OpenAiProvider {
 
                 // Process complete SSE events. Each event ends with \n\n or \r\n\r\n.
                 while let Some((pos, delim_len)) = find_event_delimiter(&buffer) {
-                    let event_bytes: Vec<u8> =
-                        buffer.drain(..pos + delim_len).collect();
+                    let event_bytes: Vec<u8> = buffer.drain(..pos + delim_len).collect();
                     // The event bytes include the trailing delimiter — trim it.
                     let event_bytes = &event_bytes[..event_bytes.len() - delim_len];
 

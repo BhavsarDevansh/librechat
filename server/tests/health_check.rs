@@ -1,7 +1,7 @@
 //! Integration tests for the Axum health check server (Issue #3).
 
 use axum::body::Body;
-use axum::http::{self, Request, StatusCode, header};
+use axum::http::{self, header, Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 

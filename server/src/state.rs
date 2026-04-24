@@ -1,6 +1,8 @@
 //! Shared application state for the Axum server.
 
+use crate::providers::{LlmProvider, OpenAiProvider};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Default static directory as a relative path resolved against the process's
 /// current working directory at runtime.
@@ -12,7 +14,8 @@ const STATIC_DIR_ENV: &str = "LIBRECHAT_STATIC_DIR";
 /// Application state shared across all request handlers via Axum's
 /// [`State`](axum::extract::State) extractor.
 ///
-/// Holds the directory path from which static frontend assets are served.
+/// Holds the configured LLM provider and the directory path from which static
+/// frontend assets are served.
 /// The directory defaults to the relative path `../frontend/dist`, resolved
 /// against the process's current working directory (CWD) at runtime via
 /// [`resolve_static_dir`]. This only matches the binary's directory when the
@@ -23,6 +26,8 @@ const STATIC_DIR_ENV: &str = "LIBRECHAT_STATIC_DIR";
 /// at startup.
 #[derive(Clone)]
 pub struct AppState {
+    /// Shared LLM provider used by API handlers.
+    pub provider: Arc<dyn LlmProvider>,
     /// Directory containing static frontend files served by `ServeDir`.
     pub static_dir: PathBuf,
 }
@@ -37,6 +42,7 @@ impl AppState {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            provider: Arc::new(OpenAiProvider::from_env()),
             static_dir: resolve_static_dir(),
         }
     }
@@ -48,7 +54,25 @@ impl AppState {
     /// CWD-related resolution surprises.
     #[must_use]
     pub fn with_static_dir(static_dir: PathBuf) -> Self {
-        Self { static_dir }
+        Self {
+            provider: Arc::new(OpenAiProvider::from_env()),
+            static_dir,
+        }
+    }
+
+    /// Creates an `AppState` with a specific provider and static directory.
+    ///
+    /// Intended for tests that need to inject a mock provider while still
+    /// exercising the real router and handlers.
+    #[must_use]
+    pub fn with_provider_and_static_dir(
+        provider: Arc<dyn LlmProvider>,
+        static_dir: PathBuf,
+    ) -> Self {
+        Self {
+            provider,
+            static_dir,
+        }
     }
 }
 

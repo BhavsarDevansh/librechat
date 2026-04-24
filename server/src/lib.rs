@@ -9,6 +9,7 @@ pub mod state;
 
 mod routes;
 
+use axum::routing::{get, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -20,6 +21,8 @@ use state::AppState;
 ///
 /// Routes:
 /// - `GET /health` — returns `{"status":"ok"}` with `200 OK`
+/// - `POST /api/chat/completions` — proxies non-streaming chat completions to
+///   the configured provider
 ///
 /// Static files:
 /// - `/` — `ServeDir` serves the Leptos WASM frontend from the configured
@@ -41,7 +44,8 @@ pub fn app(state: AppState) -> Router {
         .fallback(ServeFile::new(index_path));
 
     Router::new()
-        .route("/health", axum::routing::get(routes::health::health))
+        .route("/health", get(routes::health::health))
+        .route("/api/chat/completions", post(routes::chat::chat_completion))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .fallback_service(serve_dir)
