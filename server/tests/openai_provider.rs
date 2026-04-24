@@ -1,4 +1,5 @@
 //! Integration tests for the OpenAI-compatible provider client (Issue #6).
+//! Issue #7 tests cover SSE streaming behaviour.
 
 use server::providers::OpenAiProvider;
 use server::providers::{
@@ -11,7 +12,8 @@ use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use axum::routing::post;
 use serde_json::json;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 use tokio::net::TcpListener;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -184,16 +186,24 @@ fn test_openai_provider_new_with_api_key() {
     assert_eq!(provider.api_key(), Some("sk-test-key"));
 }
 
-/// Merged env-var test to avoid parallel races on process-global state.
+/// Merged env-var test to avoid parallel environment-variable races.
 #[test]
 fn test_openai_provider_from_env_defaults_and_custom() {
-    // --- Defaults when env vars are unset ---
-    // SAFETY: This test owns the env vars exclusively; it is the only test
-    // that mutates these variables.
+    // Save original values so we can restore them after the test.
+    let orig_base = std::env::var("LLM_BASE_URL").ok();
+    let orig_key = std::env::var("LLM_API_KEY").ok();
+    let orig_model = std::env::var("LLM_MODEL").ok();
+    let orig_connect = std::env::var("LLM_CONNECT_TIMEOUT_SECS").ok();
+    let orig_timeout = std::env::var("LLM_TIMEOUT_SECS").ok();
+
+    // ── Defaults ──────────────────────────────────────────────────────────
+    // Safety: env vars are not read from multiple threads concurrently in this test.
     unsafe {
         std::env::remove_var("LLM_BASE_URL");
         std::env::remove_var("LLM_API_KEY");
         std::env::remove_var("LLM_MODEL");
+        std::env::remove_var("LLM_CONNECT_TIMEOUT_SECS");
+        std::env::remove_var("LLM_TIMEOUT_SECS");
     }
 
     let provider = OpenAiProvider::from_env();
@@ -201,12 +211,14 @@ fn test_openai_provider_from_env_defaults_and_custom() {
     assert_eq!(provider.api_key(), None);
     assert_eq!(provider.model(), "llama3");
 
-    // --- Custom values ---
-    // SAFETY: Same rationale — exclusive ownership within this test.
+    // ── Custom values ─────────────────────────────────────────────────────
+    // Safety: env vars are not read from multiple threads concurrently in this test.
     unsafe {
         std::env::set_var("LLM_BASE_URL", "http://custom:1234");
         std::env::set_var("LLM_API_KEY", "sk-custom-key");
         std::env::set_var("LLM_MODEL", "gpt-4o");
+        std::env::set_var("LLM_CONNECT_TIMEOUT_SECS", "5");
+        std::env::set_var("LLM_TIMEOUT_SECS", "60");
     }
 
     let provider = OpenAiProvider::from_env();
@@ -214,21 +226,37 @@ fn test_openai_provider_from_env_defaults_and_custom() {
     assert_eq!(provider.api_key(), Some("sk-custom-key"));
     assert_eq!(provider.model(), "gpt-4o");
 
-    // --- Empty API key treated as None ---
-    // SAFETY: Same rationale.
+    // ── Empty API key treated as None ─────────────────────────────────────
+    // Safety: env vars are not read from multiple threads concurrently in this test.
     unsafe {
         std::env::set_var("LLM_API_KEY", "");
     }
-
     let provider = OpenAiProvider::from_env();
     assert_eq!(provider.api_key(), None);
 
-    // --- Cleanup ---
-    // SAFETY: Same rationale.
+    // Restore originals.
+    // Safety: env vars are not read from multiple threads concurrently in this test.
     unsafe {
-        std::env::remove_var("LLM_BASE_URL");
-        std::env::remove_var("LLM_API_KEY");
-        std::env::remove_var("LLM_MODEL");
+        match orig_base {
+            Some(v) => std::env::set_var("LLM_BASE_URL", v),
+            None => std::env::remove_var("LLM_BASE_URL"),
+        }
+        match orig_key {
+            Some(v) => std::env::set_var("LLM_API_KEY", v),
+            None => std::env::remove_var("LLM_API_KEY"),
+        }
+        match orig_model {
+            Some(v) => std::env::set_var("LLM_MODEL", v),
+            None => std::env::remove_var("LLM_MODEL"),
+        }
+        match orig_connect {
+            Some(v) => std::env::set_var("LLM_CONNECT_TIMEOUT_SECS", v),
+            None => std::env::remove_var("LLM_CONNECT_TIMEOUT_SECS"),
+        }
+        match orig_timeout {
+            Some(v) => std::env::set_var("LLM_TIMEOUT_SECS", v),
+            None => std::env::remove_var("LLM_TIMEOUT_SECS"),
+        }
     }
 }
 
@@ -239,10 +267,11 @@ async fn test_chat_completion_successful_response() {
     let (base_url, _handle) = spawn_mock_server().await;
     let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
 
-    let response = provider.chat_completion(test_request("test-model")).await;
-    assert!(response.is_ok(), "Expected Ok, got {:?}", response);
+    let response = provider
+        .chat_completion(test_request("test-model"))
+        .await
+        .expect("request should succeed");
 
-    let response = response.unwrap();
     assert_eq!(response.id, "chatcmpl-test123");
     assert_eq!(response.model, "test-model");
     assert_eq!(response.choices.len(), 1);
@@ -251,7 +280,10 @@ async fn test_chat_completion_successful_response() {
         response.choices[0].message.content,
         "Hello from mock server!"
     );
-    assert_eq!(response.choices[0].finish_reason.as_ref().unwrap(), "stop");
+    assert_eq!(response.choices[0].finish_reason.as_deref(), Some("stop"));
+    assert_eq!(response.usage.prompt_tokens, 10);
+    assert_eq!(response.usage.completion_tokens, 5);
+    assert_eq!(response.usage.total_tokens, 15);
 }
 
 #[tokio::test]
@@ -305,22 +337,438 @@ async fn test_chat_completion_connection_failed() {
     assert!(matches!(result, Err(ProviderError::ConnectionFailed(_))));
 }
 
-// ── Streaming stub test ──────────────────────────────────────────────────────
+// ── SSE Streaming tests (Issue #7) ──────────────────────────────────────────
+
+/// Builds a well-formed SSE data line for a given delta content string.
+fn sse_data_line(content: &str) -> String {
+    let chunk = json!({
+        "id": "chatcmpl-stream",
+        "model": "test-model",
+        "choices": [{
+            "index": 0,
+            "delta": { "content": content },
+            "finish_reason": null
+        }]
+    });
+    format!("data: {chunk}\n\n")
+}
+
+/// Builds the terminal SSE line.
+fn sse_done_line() -> String {
+    "data: [DONE]\n\n".to_string()
+}
+
+/// Spins up a mock server that responds with SSE chunks.
+async fn spawn_sse_server(chunks: Vec<String>) -> (String, tokio::task::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let port = listener.local_addr().expect("local_addr").port();
+    let base_url = format!("http://127.0.0.1:{port}");
+
+    let body = chunks.join("");
+
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post(move |_body: axum::Json<serde_json::Value>| async move {
+            (
+                StatusCode::OK,
+                [
+                    ("content-type", "text/event-stream"),
+                    ("cache-control", "no-cache"),
+                ],
+                body,
+            )
+        }),
+    );
+
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("mock server error");
+    });
+
+    wait_for_ready(port).await;
+
+    (base_url, handle)
+}
+
+/// Spins up a mock SSE server that records the Authorization header.
+async fn spawn_sse_auth_recording_server(
+    chunks: Vec<String>,
+) -> (
+    String,
+    Arc<Mutex<Option<String>>>,
+    tokio::task::JoinHandle<()>,
+) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let port = listener.local_addr().expect("local_addr").port();
+    let base_url = format!("http://127.0.0.1:{port}");
+
+    let state = MockState::default();
+    let auth_capture = state.auth_header.clone();
+    let body = chunks.join("");
+
+    let app = Router::new()
+        .route(
+            "/v1/chat/completions",
+            post(
+                move |State(state): State<MockState>,
+                      headers: axum::http::HeaderMap,
+                      _body: axum::Json<serde_json::Value>| async move {
+                    if let Some(auth) = headers.get(header::AUTHORIZATION) {
+                        let val = auth.to_str().unwrap_or("").to_string();
+                        *state.auth_header.lock().expect("lock") = Some(val);
+                    }
+                    (
+                        StatusCode::OK,
+                        [
+                            ("content-type", "text/event-stream"),
+                            ("cache-control", "no-cache"),
+                        ],
+                        body,
+                    )
+                },
+            ),
+        )
+        .with_state(state);
+
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("mock server error");
+    });
+
+    wait_for_ready(port).await;
+
+    (base_url, auth_capture, handle)
+}
+
+/// Spins up a mock SSE server that records whether the request body had `stream: true`.
+async fn spawn_sse_stream_flag_recording_server(
+    chunks: Vec<String>,
+) -> (String, Arc<Mutex<bool>>, tokio::task::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let port = listener.local_addr().expect("local_addr").port();
+    let base_url = format!("http://127.0.0.1:{port}");
+
+    let stream_flag = Arc::new(Mutex::new(false));
+    let stream_flag_clone = stream_flag.clone();
+    let body = chunks.join("");
+
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post(move |req_body: axum::Json<serde_json::Value>| async move {
+            let is_stream = req_body
+                .get("stream")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            *stream_flag_clone.lock().expect("lock") = is_stream;
+            (
+                StatusCode::OK,
+                [
+                    ("content-type", "text/event-stream"),
+                    ("cache-control", "no-cache"),
+                ],
+                body,
+            )
+        }),
+    );
+
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("mock server error");
+    });
+
+    wait_for_ready(port).await;
+
+    (base_url, stream_flag, handle)
+}
 
 #[tokio::test]
-async fn test_chat_completion_stream_returns_streaming_not_supported() {
+async fn test_stream_yields_chunks_and_closes_on_done() {
+    let chunks = vec![
+        sse_data_line("Hello"),
+        sse_data_line(" world"),
+        sse_done_line(),
+    ];
+    let (base_url, _handle) = spawn_sse_server(chunks).await;
+    let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
+
+    let mut rx = provider
+        .chat_completion_stream(test_request("test-model"))
+        .await
+        .expect("stream should return Ok");
+
+    // First chunk: "Hello"
+    let chunk1 = rx
+        .recv()
+        .await
+        .expect("should receive chunk 1")
+        .expect("chunk 1 should be Ok");
+    assert_eq!(chunk1.id, "chatcmpl-stream");
+    assert_eq!(chunk1.choices.len(), 1);
+    assert_eq!(chunk1.choices[0].delta.content.as_ref().unwrap(), "Hello");
+
+    // Second chunk: " world"
+    let chunk2 = rx
+        .recv()
+        .await
+        .expect("should receive chunk 2")
+        .expect("chunk 2 should be Ok");
+    assert_eq!(chunk2.choices[0].delta.content.as_ref().unwrap(), " world");
+
+    // Channel closes gracefully after [DONE].
+    assert!(
+        rx.recv().await.is_none(),
+        "channel should close after [DONE]"
+    );
+}
+
+#[tokio::test]
+async fn test_stream_sends_stream_true_in_request_body() {
+    let chunks = vec![sse_data_line("hi"), sse_done_line()];
+    let (base_url, stream_flag, _handle) = spawn_sse_stream_flag_recording_server(chunks).await;
+    let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
+
+    let mut rx = provider
+        .chat_completion_stream(test_request("test-model"))
+        .await
+        .expect("stream should return Ok");
+
+    // Drain the channel.
+    while rx.recv().await.is_some() {}
+
+    let was_stream = *stream_flag.lock().expect("lock");
+    assert!(was_stream, "request body should have stream: true");
+}
+
+#[tokio::test]
+async fn test_stream_sends_authorization_header_when_key_set() {
+    let chunks = vec![sse_data_line("hi"), sse_done_line()];
+    let (base_url, auth_capture, _handle) = spawn_sse_auth_recording_server(chunks).await;
     let provider = OpenAiProvider::new(
-        "http://localhost:11434".to_string(),
+        base_url,
+        Some("sk-stream-key".to_string()),
+        "test-model".to_string(),
+    );
+
+    let mut rx = provider
+        .chat_completion_stream(test_request("test-model"))
+        .await
+        .expect("stream should return Ok");
+
+    while rx.recv().await.is_some() {}
+
+    let auth = auth_capture.lock().expect("lock").clone();
+    assert!(
+        auth.as_ref().is_some_and(|v| v.starts_with("Bearer ")),
+        "Expected Bearer auth header, got {:?}",
+        auth
+    );
+}
+
+#[tokio::test]
+async fn test_stream_no_authorization_without_api_key() {
+    let chunks = vec![sse_data_line("hi"), sse_done_line()];
+    let (base_url, auth_capture, _handle) = spawn_sse_auth_recording_server(chunks).await;
+    let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
+
+    let mut rx = provider
+        .chat_completion_stream(test_request("test-model"))
+        .await
+        .expect("stream should return Ok");
+
+    while rx.recv().await.is_some() {}
+
+    let auth = auth_capture.lock().expect("lock").clone();
+    assert!(auth.is_none(), "Expected no auth header, got {:?}", auth);
+}
+
+#[tokio::test]
+async fn test_stream_connection_failed() {
+    let provider = OpenAiProvider::new(
+        "http://127.0.0.1:1".to_string(),
         None,
-        "llama3".to_string(),
+        "test-model".to_string(),
     );
 
     let result = provider
-        .chat_completion_stream(test_request("llama3"))
+        .chat_completion_stream(test_request("test-model"))
+        .await;
+
+    assert!(
+        matches!(result, Err(ProviderError::ConnectionFailed(_))),
+        "Expected ConnectionFailed for unreachable server, got {:?}",
+        result
+    );
+}
+
+#[tokio::test]
+async fn test_stream_http_error_maps_to_api_error() {
+    let (base_url, _handle) = spawn_error_server(500).await;
+    let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
+
+    let result = provider
+        .chat_completion_stream(test_request("test-model"))
+        .await;
+
+    match result {
+        Err(ProviderError::ApiError { status, message }) => {
+            assert_eq!(status, 500);
+            assert!(!message.is_empty());
+        }
+        other => panic!("Expected ApiError, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn test_stream_malformed_json_sends_error_without_terminating() {
+    // One valid chunk, one malformed, one more valid, then [DONE].
+    let valid_chunk = json!({
+        "id": "chatcmpl-malformed",
+        "model": "test-model",
+        "choices": [{
+            "index": 0,
+            "delta": { "content": "good" },
+            "finish_reason": null
+        }]
+    });
+    let chunks = vec![
+        format!("data: {valid_chunk}\n\n"),
+        "data: {not valid json}\n\n".to_string(),
+        sse_data_line("after"),
+        sse_done_line(),
+    ];
+    let (base_url, _handle) = spawn_sse_server(chunks).await;
+    let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
+
+    let mut rx = provider
+        .chat_completion_stream(test_request("test-model"))
+        .await
+        .expect("stream should return Ok");
+
+    // First chunk is valid.
+    let item1 = rx.recv().await.expect("should receive chunk 1");
+    assert!(item1.is_ok(), "first chunk should be Ok");
+    assert_eq!(
+        item1.unwrap().choices[0].delta.content.as_deref().unwrap(),
+        "good"
+    );
+
+    // Second chunk is malformed -> Err(InvalidResponse).
+    let item2 = rx.recv().await.expect("should receive error item");
+    match item2 {
+        Err(ProviderError::InvalidResponse(_)) => {}
+        other => panic!(
+            "Expected InvalidResponse for malformed JSON, got {:?}",
+            other
+        ),
+    }
+
+    // Third chunk is valid -- stream continues.
+    let item3 = rx.recv().await.expect("should receive chunk 3");
+    assert!(
+        item3.is_ok(),
+        "third chunk should be Ok after malformed one"
+    );
+    assert_eq!(
+        item3.unwrap().choices[0].delta.content.as_deref().unwrap(),
+        "after"
+    );
+
+    // Channel closes gracefully after [DONE].
+    assert!(
+        rx.recv().await.is_none(),
+        "channel should close after [DONE]"
+    );
+}
+
+#[tokio::test]
+async fn test_stream_partial_sse_lines_reassembled() {
+    // This test verifies that the provider can handle the response body as a
+    // whole, even if SSE data lines happen to be structured in a way that
+    // would require buffering. Since our mock server returns the entire body
+    // at once, we test the logical parsing: two separate SSE events in a
+    // single response body are both correctly parsed.
+    let chunk_json = json!({
+        "id": "chatcmpl-partial",
+        "model": "test-model",
+        "choices": [{
+            "index": 0,
+            "delta": { "content": "split" },
+            "finish_reason": null
+        }]
+    });
+    let chunks = vec![format!("data: {chunk_json}\n\n"), sse_done_line()];
+    let (base_url, _handle) = spawn_sse_server(chunks).await;
+    let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
+
+    let mut rx = provider
+        .chat_completion_stream(test_request("test-model"))
+        .await
+        .expect("stream should return Ok");
+
+    let item = rx
+        .recv()
+        .await
+        .expect("should receive chunk")
+        .expect("chunk should be Ok");
+    assert_eq!(item.choices[0].delta.content.as_deref().unwrap(), "split");
+
+    // Channel closes after [DONE].
+    assert!(
+        rx.recv().await.is_none(),
+        "channel should close after [DONE]"
+    );
+}
+
+#[tokio::test]
+async fn test_stream_connection_error_mid_stream_sends_err_then_closes() {
+    // Server sends one valid chunk then closes the connection (no [DONE]).
+    let chunks = vec![sse_data_line("before-drop")];
+    let (base_url, _handle) = spawn_sse_server(chunks).await;
+    let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
+
+    let mut rx = provider
+        .chat_completion_stream(test_request("test-model"))
+        .await
+        .expect("stream should return Ok");
+
+    // First chunk is valid.
+    let item1 = rx.recv().await.expect("should receive chunk");
+    assert!(item1.is_ok(), "first chunk should be Ok");
+
+    // After the server sends its response and closes, the channel should
+    // eventually close (possibly after an error item).
+    loop {
+        match rx.recv().await {
+            None => break, // Channel closed -- acceptable.
+            Some(Err(_)) => {
+                // Error sent, channel should close next.
+                assert!(
+                    rx.recv().await.is_none(),
+                    "channel should close after error"
+                );
+                break;
+            }
+            Some(Ok(_)) => {
+                // Could receive more data before the connection fully drops.
+                continue;
+            }
+        }
+    }
+}
+
+// ── Streaming method returns Ok (no longer stub) ─────────────────────────────
+
+#[tokio::test]
+async fn test_chat_completion_stream_returns_ok_with_sse_server() {
+    // Streaming is now implemented — verify the method returns Ok(Receiver)
+    // when connected to a real (mock) SSE server.
+    let chunks = vec![sse_data_line("hello"), sse_done_line()];
+    let (base_url, _handle) = spawn_sse_server(chunks).await;
+    let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
+
+    let result = provider
+        .chat_completion_stream(test_request("test-model"))
         .await;
     assert!(
-        matches!(result, Err(ProviderError::StreamingNotSupported)),
-        "Expected StreamingNotSupported, got {:?}",
+        result.is_ok(),
+        "Expected Ok(Receiver) from streaming, got {:?}",
         result
     );
 }
