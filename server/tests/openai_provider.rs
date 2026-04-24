@@ -7,14 +7,18 @@ use server::providers::{
 };
 
 use axum::Router;
+use axum::body::Body;
 use axum::extract::State;
 use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
+use axum::response::Response;
 use axum::routing::post;
 use serde_json::json;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::net::TcpListener;
+
+use futures_util::StreamExt;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,13 +56,13 @@ async fn spawn_mock_server() -> (String, tokio::task::JoinHandle<()>) {
         .route("/v1/chat/completions", post(mock_chat_completions_handler))
         .with_state(state);
 
-    let handle = tokio::spawn(async move {
+    let _handle = tokio::spawn(async move {
         axum::serve(listener, app).await.expect("mock server error");
     });
 
     wait_for_ready(port).await;
 
-    (base_url, handle)
+    (base_url, _handle)
 }
 
 /// Spins up a mock server that records the Authorization header.
@@ -79,13 +83,13 @@ async fn spawn_auth_recording_server() -> (
         .route("/v1/chat/completions", post(mock_chat_completions_handler))
         .with_state(state);
 
-    let handle = tokio::spawn(async move {
+    let _handle = tokio::spawn(async move {
         axum::serve(listener, app).await.expect("mock server error");
     });
 
     wait_for_ready(port).await;
 
-    (base_url, auth_capture, handle)
+    (base_url, auth_capture, _handle)
 }
 
 /// Default mock handler: returns a well-formed ChatCompletionResponse.
@@ -380,13 +384,13 @@ async fn spawn_sse_server(chunks: Vec<String>) -> (String, tokio::task::JoinHand
         }),
     );
 
-    let handle = tokio::spawn(async move {
+    let _handle = tokio::spawn(async move {
         axum::serve(listener, app).await.expect("mock server error");
     });
 
     wait_for_ready(port).await;
 
-    (base_url, handle)
+    (base_url, _handle)
 }
 
 /// Spins up a mock SSE server that records the Authorization header.
@@ -429,13 +433,13 @@ async fn spawn_sse_auth_recording_server(
         )
         .with_state(state);
 
-    let handle = tokio::spawn(async move {
+    let _handle = tokio::spawn(async move {
         axum::serve(listener, app).await.expect("mock server error");
     });
 
     wait_for_ready(port).await;
 
-    (base_url, auth_capture, handle)
+    (base_url, auth_capture, _handle)
 }
 
 /// Spins up a mock SSE server that records whether the request body had `stream: true`.
@@ -469,13 +473,13 @@ async fn spawn_sse_stream_flag_recording_server(
         }),
     );
 
-    let handle = tokio::spawn(async move {
+    let _handle = tokio::spawn(async move {
         axum::serve(listener, app).await.expect("mock server error");
     });
 
     wait_for_ready(port).await;
 
-    (base_url, stream_flag, handle)
+    (base_url, stream_flag, _handle)
 }
 
 #[tokio::test]
@@ -679,11 +683,11 @@ async fn test_stream_malformed_json_sends_error_without_terminating() {
 
 #[tokio::test]
 async fn test_stream_partial_sse_lines_reassembled() {
-    // This test verifies that the provider can handle the response body as a
-    // whole, even if SSE data lines happen to be structured in a way that
-    // would require buffering. Since our mock server returns the entire body
-    // at once, we test the logical parsing: two separate SSE events in a
-    // single response body are both correctly parsed.
+    // This test exercises line reassembly: the mock server sends the SSE
+    // body as a streaming HTTP response using Body::from_stream, with two
+    // separate data frames that split a data: line mid-JSON. This forces
+    // the provider to buffer partial bytes and reassemble across recv
+    // boundaries.
     let chunk_json = json!({
         "id": "chatcmpl-partial",
         "model": "test-model",
@@ -693,8 +697,47 @@ async fn test_stream_partial_sse_lines_reassembled() {
             "finish_reason": null
         }]
     });
-    let chunks = vec![format!("data: {chunk_json}\n\n"), sse_done_line()];
-    let (base_url, _handle) = spawn_sse_server(chunks).await;
+    let full_body = format!("data: {chunk_json}\n\ndata: [DONE]\n\n");
+    let mid = full_body.len() / 2;
+    let part1 = full_body.as_bytes()[..mid].to_vec();
+    let part2 = full_body.as_bytes()[mid..].to_vec();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let port = listener.local_addr().expect("local_addr").port();
+    let base_url = format!("http://127.0.0.1:{port}");
+
+    let _p1 = part1.clone();
+    let p2 = part2.clone();
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post(move |_body: axum::Json<serde_json::Value>| async move {
+            let stream = futures_util::stream::once(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                Ok::<_, std::convert::Infallible>(axum::body::Bytes::from(p2))
+            });
+            // First frame is immediate, second frame is delayed.
+            let combined = futures_util::stream::iter(vec![Ok::<_, std::convert::Infallible>(
+                axum::body::Bytes::from(part1),
+            )])
+            .chain(stream);
+            let body = Body::from_stream(combined);
+            let mut response = Response::new(body);
+            response.headers_mut().insert(
+                "content-type",
+                "text/event-stream".parse().expect("header value"),
+            );
+            response
+                .headers_mut()
+                .insert("cache-control", "no-cache".parse().expect("header value"));
+            response
+        }),
+    );
+
+    let _handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("mock server error");
+    });
+
+    wait_for_ready(port).await;
     let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
 
     let mut rx = provider
@@ -792,13 +835,13 @@ async fn spawn_error_server(status_code: u16) -> (String, tokio::task::JoinHandl
         ),
     );
 
-    let handle = tokio::spawn(async move {
+    let _handle = tokio::spawn(async move {
         axum::serve(listener, app).await.expect("mock server error");
     });
 
     wait_for_ready(port).await;
 
-    (base_url, handle)
+    (base_url, _handle)
 }
 
 #[tokio::test]

@@ -39,6 +39,9 @@ const MAX_ERROR_BODY_BYTES: usize = 4096;
 /// Buffer size for the mpsc channel used to stream chunks to the caller.
 const STREAM_CHANNEL_BUFFER: usize = 32;
 
+/// Byte sequence that marks the end of an SSE event.
+const SSE_EVENT_DELIMITER: &[u8] = b"\n\n";
+
 /// An LLM provider client that speaks the OpenAI Chat Completions API.
 ///
 /// Holds a single [`reqwest::Client`] for connection pooling across requests.
@@ -156,8 +159,12 @@ fn truncate_bytes_to_string(bytes: &[u8], max_len: usize) -> String {
     format!("{truncated}…")
 }
 
-/// Process all `data:` lines in an SSE event string, sending parsed chunks
-/// through the channel.
+/// Process all `data:` lines in a decoded SSE event string, sending parsed
+/// chunks through the channel.
+///
+/// Per the SSE specification, a `data:` field may optionally be followed by a
+/// single space before the value. Both `data:{"…"}` and `data: {"…"}` are
+/// accepted.
 ///
 /// Returns `Ok(true)` if `[DONE]` was encountered, `Ok(false)` otherwise,
 /// or `Err(())` if the receiver was dropped.
@@ -166,11 +173,13 @@ async fn process_sse_event(
     tx: &mpsc::Sender<Result<ChatCompletionChunk, ProviderError>>,
 ) -> Result<bool, ()> {
     for line in event.lines() {
-        let line = line.trim();
+        let line = line.trim_end();
         if line.is_empty() {
             continue;
         }
-        if let Some(data) = line.strip_prefix("data: ") {
+        if let Some(data) = line.strip_prefix("data:") {
+            // Per SSE spec, strip at most one leading space after "data:".
+            let data = data.strip_prefix(' ').unwrap_or(data);
             if data == "[DONE]" {
                 return Ok(true);
             }
@@ -264,7 +273,7 @@ impl LlmProvider for OpenAiProvider {
     ///
     /// # SSE protocol
     ///
-    /// - Each `data: <json>` line contains a serialised `ChatCompletionChunk`.
+    /// - Each `data:` line contains a serialised `ChatCompletionChunk`.
     /// - `data: [DONE]` signals end-of-stream; the channel is closed gracefully.
     /// - Partial SSE lines that span multiple TCP chunks are buffered and
     ///   reassembled before parsing.
@@ -315,7 +324,7 @@ impl LlmProvider for OpenAiProvider {
         let byte_stream = response.bytes_stream();
 
         tokio::spawn(async move {
-            let mut buffer = String::new();
+            let mut buffer: Vec<u8> = Vec::new();
             let mut stream = byte_stream;
 
             while let Some(chunk_result) = stream.next().await {
@@ -329,30 +338,36 @@ impl LlmProvider for OpenAiProvider {
                     }
                 };
 
-                let text = match String::from_utf8(chunk.to_vec()) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        let _ = tx
-                            .send(Err(ProviderError::InvalidResponse(format!(
-                                "invalid UTF-8 in stream: {e}"
-                            ))))
-                            .await;
-                        return;
-                    }
-                };
-
-                buffer.push_str(&text);
+                buffer.extend_from_slice(&chunk);
 
                 // Process complete SSE events. Each event ends with \n\n.
-                while let Some(event_end) = buffer.find("\n\n") {
-                    let event = buffer[..event_end].to_string();
-                    buffer = buffer[event_end + 2..].to_string();
+                while let Some(pos) = find_event_delimiter(&buffer) {
+                    let event_bytes: Vec<u8> =
+                        buffer.drain(..pos + SSE_EVENT_DELIMITER.len()).collect();
+                    // The event bytes include the trailing \n\n — trim them.
+                    let event_bytes = &event_bytes[..event_bytes.len() - SSE_EVENT_DELIMITER.len()];
 
-                    if event.is_empty() {
+                    if event_bytes.is_empty() {
                         continue;
                     }
 
-                    match process_sse_event(&event, &tx).await {
+                    let event_text = match String::from_utf8(event_bytes.to_vec()) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            if tx
+                                .send(Err(ProviderError::InvalidResponse(format!(
+                                    "invalid UTF-8 in SSE event: {e}"
+                                ))))
+                                .await
+                                .is_err()
+                            {
+                                return;
+                            }
+                            continue;
+                        }
+                    };
+
+                    match process_sse_event(&event_text, &tx).await {
                         Ok(true) => return, // [DONE] received
                         Ok(false) => {}
                         Err(()) => return, // Receiver dropped
@@ -361,11 +376,15 @@ impl LlmProvider for OpenAiProvider {
             }
 
             // Stream ended without [DONE] — process any remaining data in the buffer.
-            if !buffer.trim().is_empty() {
-                match process_sse_event(buffer.trim(), &tx).await {
-                    Ok(true) => return,
-                    Ok(false) => {}
-                    Err(()) => return,
+            if !buffer.is_empty() {
+                let remaining = String::from_utf8_lossy(&buffer);
+                let remaining = remaining.trim();
+                if !remaining.is_empty() {
+                    match process_sse_event(remaining, &tx).await {
+                        Ok(true) => return,
+                        Ok(false) => {}
+                        Err(()) => return,
+                    }
                 }
             }
 
@@ -380,4 +399,12 @@ impl LlmProvider for OpenAiProvider {
     fn name(&self) -> &str {
         "OpenAI-compatible"
     }
+}
+
+/// Find the position of the first SSE event delimiter (`\n\n`) in a byte slice.
+/// Returns the byte index of the start of the delimiter, or `None` if not found.
+fn find_event_delimiter(buffer: &[u8]) -> Option<usize> {
+    buffer
+        .windows(SSE_EVENT_DELIMITER.len())
+        .position(|w| w == SSE_EVENT_DELIMITER)
 }
