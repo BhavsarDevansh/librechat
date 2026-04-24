@@ -37,7 +37,7 @@ chat API and static file serving) will build on.
 | **Health check**    | A simple endpoint that confirms the server is running            |
 | **CORS**            | Cross-Origin Resource Sharing — lets browsers call the API     |
 | **Tracing**         | Structured logging that shows request details in the console   |
-| **AppState**        | Shared data available to all request handlers (empty for now)    |
+| **AppState**        | Shared data available to all request handlers, including config like provider/static paths |
 
 ## FAQ / Troubleshooting
 
@@ -52,9 +52,10 @@ A: Yes — set the `LIBRECHAT_PORT` environment variable before starting.
 A: That would be a bug. The only valid response is `{"status":"ok"}` with HTTP 200
 and `Content-Type: application/json`.
 
-**Q: Why is CORS set to allow everything?**
-A: This is for local development only. A future issue will tighten CORS to only
-allow known origins.
+**Q: Why isn’t my browser origin allowed?**
+A: CORS now uses an allowlist. By default it allows common localhost
+development origins. For other origins, set `LIBRECHAT_ALLOWED_ORIGINS` to a
+comma-separated list such as `https://app.example.com,https://admin.example.com`.
 
 ## Related Resources
 

@@ -24,7 +24,7 @@ lib.rs
        │    ├─ append_index_html_on_directories(true)
        │    └─ fallback: ServeFile("{static_dir}/index.html")
        ├─ layer: TraceLayer (tower-http)
-       ├─ layer: CorsLayer::permissive() (tower-http)
+       ├─ layer: CorsLayer allowlist (tower-http)
        └─ with_state(AppState)
 ```
 
@@ -54,6 +54,10 @@ lib.rs
 - **`AppState` holds `static_dir`**: The static directory path is stored in
   `AppState::static_dir` as a `PathBuf`, resolved once at startup. This avoids
   repeated env var lookups and makes the path testable.
+
+- **Static-only state avoids provider setup**: `AppState::with_static_dir()`
+  now uses a noop provider so static-file tests and callers do not construct
+  the real HTTP provider or read its environment settings unnecessarily.
 
 ## API Reference
 
@@ -98,6 +102,7 @@ using `LIBRECHAT_STATIC_DIR`, falling back to the relative path
 | ---------------------- | ------------------ | ------------------------------------------------ |
 | `LIBRECHAT_PORT`       | `3000`             | TCP port the server binds to                      |
 | `LIBRECHAT_STATIC_DIR` | `../frontend/dist` | Directory containing built frontend static files |
+| `LIBRECHAT_ALLOWED_ORIGINS` | localhost allowlist | Comma-separated CORS allowlist for browser requests |
 | `RUST_LOG`             | `server=info`     | Tracing filter (env-filter syntax)               |
 
 **Note**: `LIBRECHAT_STATIC_DIR` defaults to a relative path resolved against

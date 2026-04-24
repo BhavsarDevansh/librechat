@@ -21,7 +21,7 @@ lib.rs
   └─ app(state) → Router
        ├─ route: GET /health → routes::health::health
        ├─ layer: TraceLayer (tower-http)
-       ├─ layer: CorsLayer::permissive() (tower-http)
+       ├─ layer: CorsLayer allowlist (tower-http)
        └─ with_state(AppState)
 ```
 
@@ -32,9 +32,9 @@ lib.rs
   orchestrator that wires up tracing, resolves the port, binds the listener,
   and calls `app()`.
 
-- **Permissive CORS**: `CorsLayer::permissive()` is deliberately chosen for
-  local development convenience. This will be tightened in a future issue
-  when authentication is introduced.
+- **Allowlisted CORS**: `CorsLayer` is configured from
+  `LIBRECHAT_ALLOWED_ORIGINS` when set, and otherwise falls back to a small set
+  of common localhost development origins. Credentials are disabled explicitly.
 
 - **Zero-copy where possible**: The health handler returns `axum::Json` which
   serialises directly into the response body, avoiding intermediate allocations.
@@ -53,7 +53,8 @@ Returns the server health status.
 
 **Headers**:
 - `Content-Type: application/json`
-- `Access-Control-Allow-Origin: *` (CORS)
+- `Access-Control-Allow-Origin: <allowed origin>` when the request origin is on
+  the configured allowlist
 
 ### `pub fn app(state: AppState) -> Router`
 
@@ -67,14 +68,16 @@ if unset or invalid.
 
 ### `pub struct AppState` (in `server::state`)
 
-Empty shared-state struct, `Clone`, with `new()` and `Default` implementations.
-Ready to hold `reqwest::Client`, config, or database pools in future issues.
+Shared state holding the configured provider and static directory. `new()`
+builds the default provider from environment variables; `with_static_dir()`
+uses a lightweight noop provider for static-only scenarios.
 
 ## Configuration
 
 | Variable          | Default | Description                          |
 | ----------------- | ------- | ------------------------------------ |
 | `LIBRECHAT_PORT`  | `3000`  | TCP port the server binds to          |
+| `LIBRECHAT_ALLOWED_ORIGINS` | localhost allowlist | Comma-separated CORS allowlist |
 | `RUST_LOG`        | `server=info` | Tracing filter (env-filter syntax) |
 
 ## Testing Guide
@@ -98,8 +101,9 @@ cargo test -p server --test health_check
 | `test_health_endpoint_returns_200_ok`   | `/health` responds with HTTP 200                |
 | `test_health_endpoint_returns_json_status_ok` | Body parses as `{"status":"ok"}`         |
 | `test_health_endpoint_content_type_is_json` | Response has `Content-Type: application/json` |
-| `test_cors_preflight_allows_all_origins`| OPTIONS preflight returns `Access-Control-Allow-Origin: *` |
-| `test_cors_on_get_request`              | GET with Origin header returns `Access-Control-Allow-Origin: *` |
+| `test_cors_preflight_allows_default_local_origin` | OPTIONS preflight allows default localhost origin |
+| `test_cors_on_get_request_for_default_local_origin` | GET with localhost origin returns matching CORS header |
+| `test_cors_does_not_allow_unlisted_origin` | Unlisted origins do not receive `Access-Control-Allow-Origin` |
 
 ### Extending
 

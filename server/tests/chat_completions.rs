@@ -27,6 +27,7 @@ enum MockProviderResponse {
     Failure { status: u16, message: String },
     ConnectionFailed(String),
     InvalidResponse(String),
+    StreamEnded,
     StreamingNotSupported,
 }
 
@@ -49,11 +50,8 @@ impl MockProvider {
             ProviderError::InvalidResponse(message) => {
                 MockProviderResponse::InvalidResponse(message)
             }
+            ProviderError::StreamEnded => MockProviderResponse::StreamEnded,
             ProviderError::StreamingNotSupported => MockProviderResponse::StreamingNotSupported,
-            ProviderError::StreamEnded => MockProviderResponse::Failure {
-                status: 500,
-                message: "Stream ended unexpectedly".to_string(),
-            },
         };
 
         Self {
@@ -86,6 +84,7 @@ impl LlmProvider for MockProvider {
             MockProviderResponse::InvalidResponse(message) => {
                 Err(ProviderError::InvalidResponse(message.clone()))
             }
+            MockProviderResponse::StreamEnded => Err(ProviderError::StreamEnded),
             MockProviderResponse::StreamingNotSupported => {
                 Err(ProviderError::StreamingNotSupported)
             }
@@ -145,7 +144,10 @@ fn test_app(provider: Arc<dyn LlmProvider>) -> (axum::Router, TempDir) {
     )
     .expect("write index.html");
 
-    let state = AppState::with_provider_and_static_dir(provider, temp_dir.path().to_path_buf());
+    let state = AppState {
+        provider,
+        static_dir: temp_dir.path().to_path_buf(),
+    };
     (app(state), temp_dir)
 }
 
@@ -260,6 +262,29 @@ async fn test_chat_completions_maps_api_error_status_code() {
 }
 
 #[tokio::test]
+async fn test_chat_completions_maps_non_error_api_status_to_502() {
+    let provider = Arc::new(MockProvider::failure(ProviderError::ApiError {
+        status: 200,
+        message: "unexpected upstream status".to_string(),
+    }));
+    let request_body = serde_json::to_vec(&test_request()).expect("serialize request");
+    let (app, _temp_dir) = test_app(provider);
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/chat/completions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(request_body))
+        .expect("build request");
+
+    let response = app.oneshot(request).await.expect("oneshot");
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let body = response_body_json(response).await;
+    assert_eq!(body["error"], "unexpected upstream status");
+}
+
+#[tokio::test]
 async fn test_chat_completions_maps_connection_failed_to_502() {
     let provider = Arc::new(MockProvider::failure(ProviderError::ConnectionFailed(
         "connection refused".to_string(),
@@ -304,7 +329,27 @@ async fn test_chat_completions_maps_invalid_response_to_502() {
 }
 
 #[tokio::test]
-async fn test_chat_completions_maps_other_provider_errors_to_500() {
+async fn test_chat_completions_maps_stream_ended_to_500() {
+    let provider = Arc::new(MockProvider::failure(ProviderError::StreamEnded));
+    let request_body = serde_json::to_vec(&test_request()).expect("serialize request");
+    let (app, _temp_dir) = test_app(provider);
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/chat/completions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(request_body))
+        .expect("build request");
+
+    let response = app.oneshot(request).await.expect("oneshot");
+
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let body = response_body_json(response).await;
+    assert_eq!(body["error"], "Stream ended unexpectedly");
+}
+
+#[tokio::test]
+async fn test_chat_completions_maps_streaming_not_supported_to_500() {
     let provider = Arc::new(MockProvider::failure(ProviderError::StreamingNotSupported));
     let request_body = serde_json::to_vec(&test_request()).expect("serialize request");
     let (app, _temp_dir) = test_app(provider);

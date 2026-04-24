@@ -1,8 +1,13 @@
 //! Shared application state for the Axum server.
 
-use crate::providers::{LlmProvider, OpenAiProvider};
+use crate::providers::{
+    ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, LlmProvider,
+    OpenAiProvider, ProviderError,
+};
+use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 /// Default static directory as a relative path resolved against the process's
 /// current working directory at runtime.
@@ -32,6 +37,33 @@ pub struct AppState {
     pub static_dir: PathBuf,
 }
 
+struct NoopProvider;
+
+#[async_trait]
+impl LlmProvider for NoopProvider {
+    async fn chat_completion(
+        &self,
+        _request: ChatCompletionRequest,
+    ) -> Result<ChatCompletionResponse, ProviderError> {
+        Err(ProviderError::ConnectionFailed(
+            "LLM provider not configured for this AppState".to_string(),
+        ))
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request: ChatCompletionRequest,
+    ) -> Result<mpsc::Receiver<Result<ChatCompletionChunk, ProviderError>>, ProviderError> {
+        Err(ProviderError::ConnectionFailed(
+            "LLM provider not configured for this AppState".to_string(),
+        ))
+    }
+
+    fn name(&self) -> &str {
+        "NoopProvider"
+    }
+}
+
 impl AppState {
     /// Creates a new `AppState` with default values.
     ///
@@ -42,7 +74,7 @@ impl AppState {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            provider: Arc::new(OpenAiProvider::from_env()),
+            provider: default_provider(),
             static_dir: resolve_static_dir(),
         }
     }
@@ -55,7 +87,7 @@ impl AppState {
     #[must_use]
     pub fn with_static_dir(static_dir: PathBuf) -> Self {
         Self {
-            provider: Arc::new(OpenAiProvider::from_env()),
+            provider: noop_provider(),
             static_dir,
         }
     }
@@ -64,6 +96,7 @@ impl AppState {
     ///
     /// Intended for tests that need to inject a mock provider while still
     /// exercising the real router and handlers.
+    #[cfg(any(test, feature = "test-utils"))]
     #[must_use]
     pub fn with_provider_and_static_dir(
         provider: Arc<dyn LlmProvider>,
@@ -91,4 +124,12 @@ fn resolve_static_dir() -> PathBuf {
     std::env::var(STATIC_DIR_ENV)
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_STATIC_DIR))
+}
+
+fn default_provider() -> Arc<dyn LlmProvider> {
+    Arc::new(OpenAiProvider::from_env())
+}
+
+fn noop_provider() -> Arc<dyn LlmProvider> {
+    Arc::new(NoopProvider)
 }
