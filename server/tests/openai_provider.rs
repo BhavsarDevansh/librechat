@@ -687,13 +687,15 @@ async fn test_stream_partial_sse_lines_reassembled() {
     // body as a streaming HTTP response using Body::from_stream, with two
     // separate data frames that split a data: line mid-JSON. This forces
     // the provider to buffer partial bytes and reassemble across recv
-    // boundaries.
+    // boundaries. We embed a multibyte UTF-8 character to ensure proper
+    // handling when the split happens within a codepoint.
+    let multibyte_content = "split\u{1F680}emoji";
     let chunk_json = json!({
         "id": "chatcmpl-partial",
         "model": "test-model",
         "choices": [{
             "index": 0,
-            "delta": { "content": "split" },
+            "delta": { "content": multibyte_content },
             "finish_reason": null
         }]
     });
@@ -706,7 +708,6 @@ async fn test_stream_partial_sse_lines_reassembled() {
     let port = listener.local_addr().expect("local_addr").port();
     let base_url = format!("http://127.0.0.1:{port}");
 
-    let _p1 = part1.clone();
     let p2 = part2.clone();
     let app = Router::new().route(
         "/v1/chat/completions",
@@ -750,7 +751,11 @@ async fn test_stream_partial_sse_lines_reassembled() {
         .await
         .expect("should receive chunk")
         .expect("chunk should be Ok");
-    assert_eq!(item.choices[0].delta.content.as_deref().unwrap(), "split");
+    assert_eq!(
+        item.choices[0].delta.content.as_deref().unwrap(),
+        multibyte_content,
+        "reassembled content should match original multibyte string"
+    );
 
     // Channel closes after [DONE].
     assert!(
@@ -775,16 +780,29 @@ async fn test_stream_connection_error_mid_stream_sends_err_then_closes() {
     let item1 = rx.recv().await.expect("should receive chunk");
     assert!(item1.is_ok(), "first chunk should be Ok");
 
-    // After the server sends its response and closes, the channel should
-    // eventually close (possibly after an error item).
+    // After the server closes without [DONE], chat_completion_stream must
+    // emit ProviderError::StreamEnded before closing the channel.
+    let mut stream_ended_seen = false;
     loop {
         match rx.recv().await {
-            None => break, // Channel closed -- acceptable.
-            Some(Err(_)) => {
-                // Error sent, channel should close next.
+            None => {
+                assert!(
+                    stream_ended_seen,
+                    "channel closed without receiving StreamEnded error"
+                );
+                break;
+            }
+            Some(Err(e)) => {
+                assert!(
+                    matches!(e, ProviderError::StreamEnded),
+                    "expected StreamEnded error, got {:?}",
+                    e
+                );
+                stream_ended_seen = true;
+                // Channel should close next.
                 assert!(
                     rx.recv().await.is_none(),
-                    "channel should close after error"
+                    "channel should close after StreamEnded"
                 );
                 break;
             }

@@ -279,13 +279,16 @@ impl LlmProvider for OpenAiProvider {
     ///   reassembled before parsing.
     /// - Malformed JSON sends `Err(InvalidResponse)` but does **not** terminate
     ///   the stream.
-    /// - Connection errors mid-stream send `Err(ConnectionFailed)` or
-    ///   `Err(StreamEnded)` and close the channel.
     ///
     /// # Error mapping (initial request)
     ///
     /// - HTTP 4xx/5xx → [`ProviderError::ApiError`]
     /// - Connection refused / timeout → [`ProviderError::ConnectionFailed`]
+    ///
+    /// # Error mapping (during streaming)
+    ///
+    /// - Bytes-stream error → [`ProviderError::ConnectionFailed`]
+    /// - Clean EOF without `[DONE]` → [`ProviderError::StreamEnded`]
     async fn chat_completion_stream(
         &self,
         request: ChatCompletionRequest,
@@ -380,6 +383,8 @@ impl LlmProvider for OpenAiProvider {
                 let remaining = String::from_utf8_lossy(&buffer);
                 let remaining = remaining.trim();
                 if !remaining.is_empty() {
+                    // Trimmed &str may yield InvalidResponse for partial JSON fragments,
+                    // but we intentionally continue to fallthrough and send StreamEnded.
                     match process_sse_event(remaining, &tx).await {
                         Ok(true) => return,
                         Ok(false) => {}
