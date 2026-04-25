@@ -42,6 +42,8 @@ const DEFAULT_ALLOWED_ORIGINS: &[&str] = &[
 /// - `GET /health` — returns `{"status":"ok"}` with `200 OK`
 /// - `POST /api/chat/completions` — proxies non-streaming chat completions to
 ///   the configured provider
+/// - `POST /api/chat/completions/stream` — streams chat completions to the
+///   client using Server-Sent Events
 ///
 /// Static files:
 /// - `/` — `ServeDir` serves the Leptos WASM frontend from the configured
@@ -66,6 +68,10 @@ pub fn app(state: AppState) -> Router {
     Router::new()
         .route("/health", get(routes::health::health))
         .route("/api/chat/completions", post(routes::chat::chat_completion))
+        .route(
+            "/api/chat/completions/stream",
+            post(routes::chat_stream::chat_completion_stream),
+        )
         .layer(TraceLayer::new_for_http())
         .layer(build_cors_layer())
         .fallback_service(serve_dir)

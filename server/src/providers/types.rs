@@ -85,7 +85,7 @@ pub struct ChunkDelta {
 }
 
 /// Errors that can occur when interacting with an LLM provider.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ProviderError {
     /// Failed to establish a connection to the provider.
     ConnectionFailed(String),
