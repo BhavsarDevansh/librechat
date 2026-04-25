@@ -1,7 +1,7 @@
 //! Integration tests for the Axum health check server (Issue #3).
 
 use axum::body::Body;
-use axum::http::{self, Request, StatusCode, header};
+use axum::http::{self, header, Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
@@ -65,12 +65,12 @@ async fn test_health_endpoint_content_type_is_json() {
 }
 
 #[tokio::test]
-async fn test_cors_preflight_allows_all_origins() {
+async fn test_cors_preflight_allows_default_local_origin() {
     let app = test_app();
     let req = Request::builder()
         .method(http::Method::OPTIONS)
         .uri("/health")
-        .header(header::ORIGIN, "http://example.com")
+        .header(header::ORIGIN, "http://localhost:8080")
         .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
         .body(Body::empty())
         .expect("build request");
@@ -79,15 +79,18 @@ async fn test_cors_preflight_allows_all_origins() {
         .headers()
         .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
         .expect("access-control-allow-origin header missing");
-    assert_eq!(allow_origin.to_str().expect("header value"), "*");
+    assert_eq!(
+        allow_origin.to_str().expect("header value"),
+        "http://localhost:8080"
+    );
 }
 
 #[tokio::test]
-async fn test_cors_on_get_request() {
+async fn test_cors_on_get_request_for_default_local_origin() {
     let app = test_app();
     let req = Request::builder()
         .uri("/health")
-        .header(header::ORIGIN, "http://example.com")
+        .header(header::ORIGIN, "http://localhost:8080")
         .body(Body::empty())
         .expect("build request");
     let resp = app.oneshot(req).await.expect("oneshot");
@@ -95,5 +98,26 @@ async fn test_cors_on_get_request() {
         .headers()
         .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
         .expect("access-control-allow-origin header missing");
-    assert_eq!(allow_origin.to_str().expect("header value"), "*");
+    assert_eq!(
+        allow_origin.to_str().expect("header value"),
+        "http://localhost:8080"
+    );
+}
+
+#[tokio::test]
+async fn test_cors_does_not_allow_unlisted_origin() {
+    let app = test_app();
+    let req = Request::builder()
+        .uri("/health")
+        .header(header::ORIGIN, "http://example.com")
+        .body(Body::empty())
+        .expect("build request");
+    let resp = app.oneshot(req).await.expect("oneshot");
+
+    assert!(
+        resp.headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .is_none(),
+        "unexpected access-control-allow-origin header for unlisted origin"
+    );
 }

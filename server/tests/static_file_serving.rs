@@ -4,11 +4,12 @@
 //! files with SPA-style fallback routing.
 
 use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
+use axum::http::{header, Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use server::app;
+use server::providers::{ChatCompletionRequest, ChatMessage, MessageRole};
 use server::state::AppState;
 
 use std::path::PathBuf;
@@ -213,5 +214,31 @@ async fn test_with_static_dir_constructor() {
     assert_eq!(
         state.static_dir, custom_dir,
         "with_static_dir should set the static_dir field"
+    );
+}
+
+#[tokio::test]
+async fn test_with_static_dir_uses_noop_provider() {
+    let state = AppState::with_static_dir(PathBuf::from("/tmp/custom-static"));
+    let request = ChatCompletionRequest {
+        model: "test-model".to_string(),
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: "hello".to_string(),
+        }],
+        temperature: None,
+        max_tokens: None,
+        stream: Some(false),
+    };
+
+    let error = state
+        .provider
+        .chat_completion(request)
+        .await
+        .expect_err("with_static_dir should not construct a real provider");
+
+    assert!(
+        matches!(error, server::providers::ProviderError::ConnectionFailed(_)),
+        "expected noop provider to return ConnectionFailed, got {error:?}"
     );
 }

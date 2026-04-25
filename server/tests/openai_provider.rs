@@ -6,13 +6,13 @@ use server::providers::{
     ChatCompletionRequest, ChatMessage, LlmProvider, MessageRole, ProviderError,
 };
 
-use axum::Router;
 use axum::body::Body;
 use axum::extract::State;
-use axum::http::{StatusCode, header};
+use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
 use axum::response::Response;
 use axum::routing::post;
+use axum::Router;
 use serde_json::json;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -765,8 +765,8 @@ async fn test_stream_partial_sse_lines_reassembled() {
 }
 
 #[tokio::test]
-async fn test_stream_connection_error_mid_stream_sends_err_then_closes() {
-    // Server sends one valid chunk then closes the connection (no [DONE]).
+async fn test_stream_server_close_without_done_sends_stream_ended_then_closes() {
+    // Server sends one valid chunk then cleanly ends the response without [DONE].
     let chunks = vec![sse_data_line("before-drop")];
     let (base_url, _handle) = spawn_sse_server(chunks).await;
     let provider = OpenAiProvider::new(base_url, None, "test-model".to_string());
@@ -780,17 +780,12 @@ async fn test_stream_connection_error_mid_stream_sends_err_then_closes() {
     let item1 = rx.recv().await.expect("should receive chunk");
     assert!(item1.is_ok(), "first chunk should be Ok");
 
-    // After the server closes without [DONE], chat_completion_stream must
-    // emit ProviderError::StreamEnded before closing the channel.
-    let mut stream_ended_seen = false;
+    // After a clean EOF without [DONE], chat_completion_stream must emit
+    // ProviderError::StreamEnded before closing the channel.
     loop {
         match rx.recv().await {
             None => {
-                assert!(
-                    stream_ended_seen,
-                    "channel closed without receiving StreamEnded error"
-                );
-                break;
+                panic!("channel closed without receiving StreamEnded error");
             }
             Some(Err(e)) => {
                 assert!(
@@ -798,7 +793,6 @@ async fn test_stream_connection_error_mid_stream_sends_err_then_closes() {
                     "expected StreamEnded error, got {:?}",
                     e
                 );
-                stream_ended_seen = true;
                 // Channel should close next.
                 assert!(
                     rx.recv().await.is_none(),
