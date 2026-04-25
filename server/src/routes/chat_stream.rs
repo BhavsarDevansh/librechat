@@ -84,12 +84,23 @@ fn build_sse_stream(
         match state {
             SseStreamState::Receiving(mut rx) => match rx.recv().await {
                 Some(Ok(chunk)) => {
-                    let json = serde_json::to_string(&chunk).unwrap_or_else(|_| "{}".to_string());
-                    let event = Event::default().data(json);
-                    Some((Ok(event), SseStreamState::Receiving(rx)))
+                    match serde_json::to_string(&chunk) {
+                        Ok(json) => {
+                            let event = Event::default().data(json);
+                            Some((Ok(event), SseStreamState::Receiving(rx)))
+                        }
+                        Err(serde_err) => {
+                            warn!(error = %serde_err, "failed to serialise ChatCompletionChunk; sending error event and closing stream");
+                            let envelope = serde_json::json!({"error": {"message": format!("chunk serialisation failed: {serde_err}")}});
+                            let event = Event::default().event("error").data(envelope.to_string());
+                            Some((Ok(event), SseStreamState::Done))
+                        }
+                    }
                 }
                 Some(Err(err)) => {
-                    let event = Event::default().event("error").data(err.to_string());
+                    warn!(error = %err, "mid-stream provider error; sending error event and closing stream");
+                    let envelope = serde_json::json!({"error": {"message": err.to_string()}});
+                    let event = Event::default().event("error").data(envelope.to_string());
                     Some((Ok(event), SseStreamState::Done))
                 }
                 None => {

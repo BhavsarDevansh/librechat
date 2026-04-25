@@ -32,7 +32,7 @@ The `-N` flag disables buffering so you can see chunks arrive in real time.
 
 The server responds with a stream of events, each prefixed with `data:`:
 
-```
+```text
 data: {"id":"chatcmpl-1","model":"llama3","choices":[{"index":0,"delta":{"content":"Once"},"finish_reason":null}]}
 
 data: {"id":"chatcmpl-1","model":"llama3","choices":[{"index":0,"delta":{"content":" upon"},"finish_reason":null}]}
@@ -48,7 +48,7 @@ The `data: [DONE]` message signals that the stream has finished.
 
 If something goes wrong mid-stream, the server sends an error event:
 
-```
+```text
 event: error
 data: Connection failed: upstream disconnected
 ```

@@ -60,7 +60,6 @@ impl StreamMockProvider {
         }
     }
 
-    #[allow(dead_code)]
     fn captured_request_handle(&self) -> Arc<Mutex<Option<ChatCompletionRequest>>> {
         Arc::clone(&self.captured_request)
     }
@@ -178,13 +177,8 @@ fn parse_sse_data_events(raw: &str) -> Vec<String> {
                 current_data.push('\n');
                 current_data.push_str(rest);
             }
-        } else if let Some(rest) = line.strip_prefix("event: ") {
-            // Store event type for later; for now, just note it
-            // by prefixing the data with "event:<type>|"
-            if !current_data.is_empty() {
-                // Already have data; this is an event type for the current event
-            }
-            let _ = rest; // We'll handle event types separately
+        } else if line.strip_prefix("event: ").is_some() {
+            // Event type lines are parsed by parse_sse_events; ignored here
         } else if line.is_empty() {
             // End of event
             if !current_data.is_empty() {
@@ -416,7 +410,7 @@ async fn test_stream_endpoint_returns_502_on_connection_failed() {
 }
 
 #[tokio::test]
-async fn test_stream_endpoint_returns_502_on_api_error() {
+async fn test_stream_endpoint_returns_429_on_api_error() {
     let provider = Arc::new(StreamMockProvider::immediate_error(
         ProviderError::ApiError {
             status: 429,
@@ -468,6 +462,4 @@ async fn test_stream_endpoint_forwards_request_to_provider() {
     assert_eq!(captured_req.messages[0].role, MessageRole::User);
     assert_eq!(captured_req.messages[0].content, "Hello");
     assert_eq!(captured_req.stream, Some(true));
-
-    let _ = response;
 }

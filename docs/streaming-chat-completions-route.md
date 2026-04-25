@@ -38,7 +38,7 @@ The request flow is:
 
 ### State Machine Diagram
 
-```
+```text
           ┌──────────────────────────────────────────────────────┐
           │               SseStreamState::Receiving              │
           │  ┌─────────────────────────────────────────────────┐ │
@@ -110,7 +110,7 @@ pub struct ChatCompletionRequest {
 
 ### SSE Event Format
 
-```
+```text
 data: {"id":"chatcmpl-1","model":"llama3","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
 
 data: {"id":"chatcmpl-1","model":"llama3","choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}
@@ -121,7 +121,7 @@ data: [DONE]
 
 Mid-stream error:
 
-```
+```text
 data: {"id":"chatcmpl-1","model":"llama3","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
 
 event: error
@@ -172,8 +172,10 @@ The handler emits `tracing` records for:
 - Request start with `model` and `message_count`
 - Pre-stream failure with mapped HTTP status and provider error
 
-Mid-stream errors are not logged at the route level since the spawned provider
-task handles its own error reporting.
+Mid-stream errors are logged at the route level in `build_sse_stream`
+(`server/src/routes/chat_stream.rs`) using `warn!`, including the provider
+error details. This makes mid-stream failures observable without relying on
+provider-side logging.
 
 ## Testing Guide
 

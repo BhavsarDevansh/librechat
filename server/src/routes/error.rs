@@ -15,7 +15,7 @@ pub(crate) fn map_provider_error(error: &ProviderError) -> (StatusCode, String) 
     match error {
         ProviderError::ApiError { status, message } => {
             let status = match *status {
-                400..=599 => StatusCode::from_u16(*status).unwrap_or(StatusCode::BAD_GATEWAY),
+                408 | 429 => StatusCode::from_u16(*status).unwrap_or(StatusCode::BAD_GATEWAY),
                 _ => StatusCode::BAD_GATEWAY,
             };
             (status, message.clone())
