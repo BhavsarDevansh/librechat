@@ -1,17 +1,12 @@
 //! Non-streaming chat completion API handler.
 
-use crate::providers::{ChatCompletionRequest, ProviderError};
+use crate::providers::ChatCompletionRequest;
+use crate::routes::error::{error_response, map_provider_error};
 use crate::state::AppState;
 use axum::extract::{rejection::JsonRejection, Json, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use serde::Serialize;
 use tracing::{error, info, warn};
-
-#[derive(Serialize)]
-struct ErrorResponse {
-    error: String,
-}
 
 /// `POST /api/chat/completions` — forwards a chat completion request to the
 /// configured provider and returns the full JSON response.
@@ -51,26 +46,4 @@ pub async fn chat_completion(
             error_response(status, message)
         }
     }
-}
-
-fn map_provider_error(error: &ProviderError) -> (StatusCode, String) {
-    match error {
-        ProviderError::ApiError { status, message } => {
-            let status = match *status {
-                400..=599 => StatusCode::from_u16(*status).unwrap_or(StatusCode::BAD_GATEWAY),
-                _ => StatusCode::BAD_GATEWAY,
-            };
-            (status, message.clone())
-        }
-        ProviderError::ConnectionFailed(_) => (StatusCode::BAD_GATEWAY, error.to_string()),
-        ProviderError::InvalidResponse(_) => (StatusCode::BAD_GATEWAY, error.to_string()),
-        ProviderError::StreamEnded => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
-        ProviderError::StreamingNotSupported => {
-            (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-        }
-    }
-}
-
-fn error_response(status: StatusCode, message: String) -> axum::response::Response {
-    (status, Json(ErrorResponse { error: message })).into_response()
 }
