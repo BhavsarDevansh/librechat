@@ -50,7 +50,7 @@ If something goes wrong mid-stream, the server sends an error event:
 
 ```text
 event: error
-data: Connection failed: upstream disconnected
+data: {"error":{"message":"Connection failed: upstream disconnected"}}
 ```
 
 After an error event, no more data is sent and the stream closes.

@@ -366,11 +366,21 @@ async fn test_stream_endpoint_reports_errors_via_sse_event() {
         "expected at least one error event, got: {events:?}"
     );
 
-    // The error event data should contain the error message
+    // The error event data should be a JSON envelope with the expected shape
     let error_data = &error_events[0].1;
+    let error_json: serde_json::Value =
+        serde_json::from_str(error_data).expect("error data should be valid JSON");
     assert!(
-        error_data.contains("upstream disconnected"),
-        "error data should contain the error message, got: {error_data}"
+        error_json.get("error").is_some(),
+        "error envelope should have top-level 'error' field, got: {error_json}"
+    );
+    assert!(
+        error_json["error"].get("message").is_some(),
+        "error envelope should have 'error.message' field, got: {error_json}"
+    );
+    assert!(
+        error_json["error"]["message"].is_string(),
+        "error.message should be a string, got: {error_json}"
     );
 }
 

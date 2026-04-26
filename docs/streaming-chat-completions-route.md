@@ -105,7 +105,7 @@ pub struct ChatCompletionRequest {
 | Event type | Data format | When emitted |
 |---|---|---|
 | (default) | JSON `ChatCompletionChunk` | Each successful chunk from the provider |
-| `error` | Plain text error message | Mid-stream provider error |
+| `error` | JSON envelope: `{"error":{"message":"..."}}` | Mid-stream provider error |
 | (default) | `[DONE]` | Provider channel closed cleanly |
 
 ### SSE Event Format
@@ -125,7 +125,7 @@ Mid-stream error:
 data: {"id":"chatcmpl-1","model":"llama3","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
 
 event: error
-data: Connection failed: upstream disconnected
+data: {"error":{"message":"Connection failed: upstream disconnected"}}
 
 ```
 
