@@ -84,7 +84,9 @@ fn test_chat_input_component_defined() {
 fn test_app_uses_chat_view() {
     let source = read_file("frontend/src/lib.rs");
     assert!(
-        source.contains("ChatView"),
+        Regex::new(r"<ChatView\b")
+            .unwrap()
+            .is_match(&source),
         "App component must render ChatView"
     );
 }
@@ -93,7 +95,9 @@ fn test_app_uses_chat_view() {
 fn test_lib_rs_imports_components() {
     let source = read_file("frontend/src/lib.rs");
     assert!(
-        source.contains("components"),
+        Regex::new(r"(?:pub\s+)?mod\s+components\b|use\s+(?:crate::)?components\b")
+            .unwrap()
+            .is_match(&source),
         "lib.rs must import the components module"
     );
 }

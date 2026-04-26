@@ -77,8 +77,8 @@ pub fn MessageList(messages: ReadSignal<Vec<ChatMessage>>) -> impl IntoView {
     Effect::new(move |_| {
         let _ = messages.get();
         if let Some(el) = scroll_ref.get() {
-            let opts = web_sys::ScrollToOptions::new();
-            opts.set_top(f64::MAX);
+            let mut opts = web_sys::ScrollToOptions::new();
+            opts.set_top(el.scroll_height() as f64);
             el.scroll_to_with_scroll_to_options(&opts);
         }
     });
@@ -115,8 +115,9 @@ pub fn ChatInput(
 
     let handle_send = move || {
         let text = input_text.get();
-        if !text.is_empty() {
-            on_send(text);
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            on_send(trimmed.to_string());
             set_input_text.set(String::new());
         }
     };
@@ -128,7 +129,7 @@ pub fn ChatInput(
         }
     };
 
-    let is_disabled = move || input_text.get().is_empty();
+    let is_disabled = move || input_text.get().trim().is_empty();
 
     view! {
         <div class="sticky-input chat-input-area">
