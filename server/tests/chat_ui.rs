@@ -1,4 +1,11 @@
-//! Integration tests verifying the Leptos chat UI components (Issue #10).
+//! Structural and CSS integration tests for the Leptos chat UI (Issue #10).
+//!
+//! Behavioral tests live in frontend/tests/chat_ui.rs and exercise compiled
+//! components in a browser environment via wasm-bindgen-test.
+//!
+//! This file verifies file existence, component definitions, and CSS rules —
+//! concerns that are best checked with static source analysis rather than
+//! DOM queries.
 
 use regex::Regex;
 use std::path::Path;
@@ -36,152 +43,38 @@ fn test_components_module_file_exists() {
     assert!(path.exists(), "frontend/src/components/mod.rs must exist");
 }
 
-// ---- ChatMessage struct ----
-
-#[test]
-fn test_chat_message_struct_defined() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("struct ChatMessage"),
-        "chat.rs must define a ChatMessage struct"
-    );
-    assert!(
-        source.contains("role"),
-        "ChatMessage must have a role field"
-    );
-    assert!(
-        source.contains("content"),
-        "ChatMessage must have a content field"
-    );
-}
-
-#[test]
-fn test_message_role_enum_defined() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("enum MessageRole"),
-        "chat.rs must define a MessageRole enum"
-    );
-    assert!(
-        source.contains("User") && source.contains("Assistant"),
-        "MessageRole must have User and Assistant variants"
-    );
-}
-
-#[test]
-fn test_chat_message_derives_clone() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        Regex::new(r"#\[derive[^\]]*Clone[^\]]*\]")
-            .unwrap()
-            .is_match(&source)
-            && source.contains("struct ChatMessage"),
-        "ChatMessage must derive Clone"
-    );
-}
-
-// ---- ChatView component ----
+// ---- Component definitions (structural) ----
 
 #[test]
 fn test_chat_view_component_defined() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        source.contains("#[component]") && source.contains("fn ChatView"),
+        Regex::new(r"#\[component\]\s*(?:pub\s+)?fn\s+ChatView")
+            .unwrap()
+            .is_match(&source),
         "chat.rs must define a ChatView component"
     );
 }
-
-// ---- MessageList component ----
 
 #[test]
 fn test_message_list_component_defined() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        source.contains("#[component]") && source.contains("fn MessageList"),
+        Regex::new(r"#\[component\]\s*(?:pub\s+)?fn\s+MessageList")
+            .unwrap()
+            .is_match(&source),
         "chat.rs must define a MessageList component"
     );
 }
 
 #[test]
-fn test_message_list_uses_for_each() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("<For") || source.contains("<For "),
-        "MessageList must use the <For/> component for rendering message lists"
-    );
-}
-
-// ---- ChatInput component ----
-
-#[test]
 fn test_chat_input_component_defined() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        source.contains("#[component]") && source.contains("fn ChatInput"),
-        "chat.rs must define a ChatInput component"
-    );
-}
-
-#[test]
-fn test_chat_input_has_textarea() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("textarea"),
-        "ChatInput must contain a textarea element"
-    );
-}
-
-#[test]
-fn test_chat_input_has_send_button() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        Regex::new(r#"<button[^>]*class="[^"]*\bsend-btn\b[^"]*"[^>]*>"#)
+        Regex::new(r"#\[component\]\s*(?:pub\s+)?fn\s+ChatInput")
             .unwrap()
             .is_match(&source),
-        "ChatInput must contain a button with class 'send-btn'"
-    );
-}
-
-#[test]
-fn test_chat_input_handles_enter_key() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("keydown") || source.contains("keypress"),
-        "ChatInput must handle keyboard events (Enter/Shift+Enter)"
-    );
-}
-
-#[test]
-fn test_chat_input_send_button_disabled_when_empty() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("disabled"),
-        "ChatInput send button must have a disabled attribute"
-    );
-}
-
-// ---- Signal for conversation history ----
-
-#[test]
-fn test_chat_view_uses_signal_vec() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("signal("),
-        "ChatView must use a signal for managing conversation history"
-    );
-}
-
-#[test]
-fn test_chat_view_passes_messages_to_message_list() {
-    let source = read_file("frontend/src/components/chat.rs");
-    // ChatView should render MessageList and pass messages to it
-    assert!(
-        source.contains("MessageList"),
-        "ChatView must reference MessageList component"
-    );
-    assert!(
-        source.contains("ChatInput"),
-        "ChatView must reference ChatInput component"
+        "chat.rs must define a ChatInput component"
     );
 }
 
@@ -200,7 +93,7 @@ fn test_app_uses_chat_view() {
 fn test_lib_rs_imports_components() {
     let source = read_file("frontend/src/lib.rs");
     assert!(
-        source.contains("components") || source.contains("chat"),
+        source.contains("components"),
         "lib.rs must import the components module"
     );
 }
@@ -295,43 +188,5 @@ fn test_css_message_list_responsive() {
     assert!(
         Regex::new(r"\.message-list\s*\{").unwrap().is_match(&css),
         "main.css must define .message-list class"
-    );
-}
-
-// ---- Auto-scroll behaviour ----
-
-#[test]
-fn test_message_list_has_auto_scroll() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("NodeRef") && source.contains("scroll_to"),
-        "MessageList must implement auto-scroll using NodeRef and scroll_to"
-    );
-}
-
-#[test]
-fn test_message_list_uses_effect_for_scroll() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("Effect::new"),
-        "MessageList must use Effect to trigger auto-scroll on message changes"
-    );
-}
-
-#[test]
-fn test_chat_input_clears_after_send() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("String::new()"),
-        "ChatInput must clear the input text after sending a message"
-    );
-}
-
-#[test]
-fn test_chat_input_shift_enter_allows_newline() {
-    let source = read_file("frontend/src/components/chat.rs");
-    assert!(
-        source.contains("shift_key"),
-        "ChatInput must check shift_key to allow Shift+Enter for newlines"
     );
 }

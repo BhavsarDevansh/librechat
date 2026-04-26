@@ -34,13 +34,13 @@ pub fn ChatView() -> impl IntoView {
     let next_id = RwSignal::new(0usize);
 
     let on_send = move |text: String| {
-        if text.is_empty() {
-            return;
-        }
-        let user_id = next_id.get();
-        next_id.update(|id| *id += 1);
-        let assistant_id = next_id.get();
-        next_id.update(|id| *id += 1);
+        let get_next = move || {
+            let prev = next_id.get();
+            next_id.update(|id| *id += 1);
+            prev
+        };
+        let user_id = get_next();
+        let assistant_id = get_next();
         let user_msg = ChatMessage {
             id: user_id,
             role: MessageRole::User,
