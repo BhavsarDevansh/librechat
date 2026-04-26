@@ -146,3 +146,114 @@ a:focus-visible {
   white-space: nowrap;
   border: 0;
 }
+/* --------------------------------------------------------------------------
+   7. Chat UI Components
+   -------------------------------------------------------------------------- */
+
+/* Message list container — uses the scroll-area layout utility */
+.message-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Base bubble style shared by all messages */
+.message-bubble {
+  max-width: 75%;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-lg);
+  word-wrap: break-word;
+  line-height: 1.5;
+}
+
+/* User messages — right-aligned with accent background */
+.message-user {
+  align-self: flex-end;
+  background-color: var(--color-accent);
+  color: #ffffff;
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+/* Assistant messages — left-aligned with secondary background */
+.message-assistant {
+  align-self: flex-start;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+/* Chat input area — textarea + send button row */
+.chat-input-area {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-end;
+}
+
+/* Textarea inside the chat input */
+.chat-textarea {
+  flex: 1 1 0;
+  min-height: 2.5rem;
+  max-height: 10rem;
+  resize: vertical;
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.chat-textarea:focus {
+  border-color: var(--color-accent);
+}
+
+.chat-textarea::placeholder {
+  color: var(--color-text-secondary);
+}
+
+/* Send button */
+.send-btn {
+  flex-shrink: 0;
+  padding: var(--space-sm) var(--space-lg);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.send-btn:hover:not(:disabled) {
+  background-color: var(--color-accent-hover);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   8. Responsive — Chat UI
+   -------------------------------------------------------------------------- */
+@media (max-width: 480px) {
+  .message-bubble {
+    max-width: 90%;
+  }
+
+  .chat-input-area {
+    flex-direction: column;
+  }
+
+  .send-btn {
+    width: 100%;
+  }
+}

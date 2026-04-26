@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 leptos = { workspace = true }
 wasm-bindgen = { workspace = true }
+web-sys = { version = "0.3", features = ["KeyboardEvent", "HtmlDivElement", "ScrollToOptions"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

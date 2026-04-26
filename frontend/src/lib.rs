@@ -1,3 +1,6 @@
+mod components;
+
+use components::chat::ChatView;
 use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 
@@ -5,7 +8,7 @@ use wasm_bindgen::prelude::*;
 pub fn App() -> impl IntoView {
     view! {
         <div class="app-root">
-            <p>"Hello from Leptos!"</p>
+            <ChatView />
         </div>
     }
 }
