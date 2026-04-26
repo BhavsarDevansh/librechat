@@ -123,7 +123,7 @@ pub fn ChatInput(
     };
 
     let on_keydown = move |ev: web_sys::KeyboardEvent| {
-        if ev.key() == "Enter" && !ev.shift_key() {
+        if ev.key() == "Enter" && !ev.shift_key() && !ev.is_composing() {
             ev.prevent_default();
             handle_send();
         }

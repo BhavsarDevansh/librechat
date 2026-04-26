@@ -49,7 +49,7 @@ fn test_components_module_file_exists() {
 fn test_chat_view_component_defined() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        Regex::new(r"#\[component\]\s*(?:pub\s+)?fn\s+ChatView")
+        Regex::new(r"#\[component\]\s*(?:pub\s+)?fn\s+ChatView\b\s*\(")
             .unwrap()
             .is_match(&source),
         "chat.rs must define a ChatView component"
@@ -60,7 +60,7 @@ fn test_chat_view_component_defined() {
 fn test_message_list_component_defined() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        Regex::new(r"#\[component\]\s*(?:pub\s+)?fn\s+MessageList")
+        Regex::new(r"#\[component\]\s*(?:pub\s+)?fn\s+MessageList\b\s*\(")
             .unwrap()
             .is_match(&source),
         "chat.rs must define a MessageList component"
@@ -71,7 +71,7 @@ fn test_message_list_component_defined() {
 fn test_chat_input_component_defined() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        Regex::new(r"#\[component\]\s*(?:pub\s+)?fn\s+ChatInput")
+        Regex::new(r"#\[component\]\s*(?:pub\s+)?fn\s+ChatInput\b\s*\(")
             .unwrap()
             .is_match(&source),
         "chat.rs must define a ChatInput component"
