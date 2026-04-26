@@ -1,3 +1,4 @@
+mod api;
 mod components;
 
 use components::chat::ChatView;

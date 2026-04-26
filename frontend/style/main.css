@@ -257,3 +257,35 @@ a:focus-visible {
     width: 100%;
   }
 }
+
+/* --------------------------------------------------------------------------
+   9. Loading & Error States
+   -------------------------------------------------------------------------- */
+
+/* Loading indicator — animated "Thinking…" bubble */
+.message-loading {
+  align-self: flex-start;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-style: italic;
+  animation: pulse-opacity 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+/* Error messages — left-aligned with error styling */
+.message-error {
+  background-color: #7f1d1d;
+  color: #fecaca;
+  border: 1px solid #991b1b;
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+/* Disabled textarea while request is in-flight */
+.chat-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

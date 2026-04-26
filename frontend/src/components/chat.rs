@@ -4,7 +4,12 @@
 //! building blocks of the conversation interface. Messages are stored in a
 //! reactive signal (`Vec<ChatMessage>`) inside `ChatView` and flow downward
 //! to `MessageList` for rendering.
+//!
+//! The `ChatView` component connects to the backend via
+//! [`crate::api::send_chat_request`] and manages loading and error states
+//! reactively.
 
+use crate::api::{self, ApiChatMessage, ApiMessageRole};
 use leptos::prelude::*;
 
 /// Role of a participant in a chat conversation.
@@ -20,47 +25,103 @@ pub struct ChatMessage {
     pub id: usize,
     pub role: MessageRole,
     pub content: String,
+    /// When `true`, the message content is an error string and the bubble
+    /// should be styled with the error colour scheme.
+    pub is_error: bool,
 }
 
-/// Top-level chat view that manages conversation history and composes
-/// [`MessageList`] and [`ChatInput`].
+/// Top-level chat view that manages conversation history, loading state, and
+/// composes [`MessageList`] and [`ChatInput`].
 ///
-/// For now, sending a user message immediately appends a simulated
-/// assistant echo response. This will be replaced with a real backend
-/// call once the streaming endpoint is wired in.
+/// On send, the user message is appended to the signal list, a loading state
+/// is set, and [`send_chat_request`] is called. On success the assistant
+/// response is appended and loading cleared; on error an error message bubble
+/// is appended and loading cleared.
 #[component]
 pub fn ChatView() -> impl IntoView {
     let (messages, set_messages) = signal(Vec::<ChatMessage>::new());
+    let (loading, set_loading) = signal(false);
     let next_id = RwSignal::new(0usize);
 
     let on_send = move |text: String| {
-        let get_next = move || {
+        let user_id = {
             let prev = next_id.get();
             next_id.update(|id| *id += 1);
             prev
         };
-        let user_id = get_next();
-        let assistant_id = get_next();
         let user_msg = ChatMessage {
             id: user_id,
             role: MessageRole::User,
             content: text.clone(),
-        };
-        let assistant_msg = ChatMessage {
-            id: assistant_id,
-            role: MessageRole::Assistant,
-            content: format!("Echo: {text}"),
+            is_error: false,
         };
         set_messages.update(move |msgs| {
             msgs.push(user_msg);
-            msgs.push(assistant_msg);
+        });
+        set_loading.set(true);
+
+        let api_messages: Vec<ApiChatMessage> = {
+            let msgs = messages.get();
+            msgs.iter()
+                .map(|m| ApiChatMessage {
+                    role: match m.role {
+                        MessageRole::User => ApiMessageRole::User,
+                        MessageRole::Assistant => ApiMessageRole::Assistant,
+                    },
+                    content: m.content.clone(),
+                })
+                .collect()
+        };
+
+        leptos::task::spawn_local(async move {
+            let result = api::send_chat_request(&api_messages, "").await;
+            set_loading.set(false);
+
+            let assistant_id = next_id.get();
+            next_id.update(|id| *id += 1);
+
+            match result {
+                Ok(response) => {
+                    let content = response
+                        .choices
+                        .first()
+                        .map(|c| c.message.content.clone())
+                        .unwrap_or_else(|| "(empty response)".to_string());
+
+                    let assistant_msg = ChatMessage {
+                        id: assistant_id,
+                        role: MessageRole::Assistant,
+                        content,
+                        is_error: false,
+                    };
+                    set_messages.update(move |msgs| {
+                        msgs.push(assistant_msg);
+                    });
+                }
+                Err(error) => {
+                    let error_msg = ChatMessage {
+                        id: assistant_id,
+                        role: MessageRole::Assistant,
+                        content: format!("{error}"),
+                        is_error: true,
+                    };
+                    set_messages.update(move |msgs| {
+                        msgs.push(error_msg);
+                    });
+                }
+            }
         });
     };
 
     view! {
         <div class="flex-column-full">
             <MessageList messages />
-            <ChatInput on_send />
+            {move || loading.get().then(|| view! {
+                <div class="message-bubble message-assistant message-loading">
+                    "Thinking…"
+                </div>
+            })}
+            <ChatInput on_send disabled=loading />
         </div>
     }
 }
@@ -77,7 +138,7 @@ pub fn MessageList(messages: ReadSignal<Vec<ChatMessage>>) -> impl IntoView {
     Effect::new(move |_| {
         let _ = messages.get();
         if let Some(el) = scroll_ref.get() {
-            let mut opts = web_sys::ScrollToOptions::new();
+            let opts = web_sys::ScrollToOptions::new();
             opts.set_top(el.scroll_height() as f64);
             el.scroll_to_with_scroll_to_options(&opts);
         }
@@ -90,9 +151,10 @@ pub fn MessageList(messages: ReadSignal<Vec<ChatMessage>>) -> impl IntoView {
                 key=|msg: &ChatMessage| msg.id
                 let(msg)
             >
-                <div class={move || match msg.role {
-                    MessageRole::User => "message-bubble message-user",
-                    MessageRole::Assistant => "message-bubble message-assistant",
+                <div class={move || match (&msg.role, msg.is_error) {
+                    (MessageRole::User, _) => "message-bubble message-user",
+                    (MessageRole::Assistant, true) => "message-bubble message-assistant message-error",
+                    (MessageRole::Assistant, false) => "message-bubble message-assistant",
                 }}>
                     {move || msg.content.clone()}
                 </div>
@@ -104,12 +166,16 @@ pub fn MessageList(messages: ReadSignal<Vec<ChatMessage>>) -> impl IntoView {
 /// Input area with a textarea and send button.
 ///
 /// - `Enter` sends the message; `Shift+Enter` inserts a new line.
-/// - The send button is disabled when the input is empty.
+/// - The send button is disabled when the input is empty **or** when the
+///   `disabled` signal is `true` (i.e. a request is in-flight).
 /// - The input field is cleared after sending.
 #[component]
 pub fn ChatInput(
     /// Callback invoked with the message text when the user sends a message.
     on_send: impl Fn(String) + Copy + 'static,
+    /// When `true`, both the textarea and send button are disabled.
+    #[prop(into)]
+    disabled: Signal<bool>,
 ) -> impl IntoView {
     let (input_text, set_input_text) = signal(String::new());
 
@@ -129,7 +195,7 @@ pub fn ChatInput(
         }
     };
 
-    let is_disabled = move || input_text.get().trim().is_empty();
+    let is_send_disabled = move || disabled.get() || input_text.get().trim().is_empty();
 
     view! {
         <div class="sticky-input chat-input-area">
@@ -137,6 +203,7 @@ pub fn ChatInput(
                 class="chat-textarea"
                 placeholder="Type a message…"
                 prop:value=move || input_text.get()
+                disabled=move || disabled.get()
                 on:input:target=move |ev| {
                     set_input_text.set(ev.target().value());
                 }
@@ -144,7 +211,7 @@ pub fn ChatInput(
             ></textarea>
             <button
                 class="send-btn"
-                disabled=is_disabled
+                disabled=is_send_disabled
                 on:click=move |_| handle_send()
             >
                 "Send"

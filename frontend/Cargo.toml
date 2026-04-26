@@ -1,12 +1,16 @@
 [package]
 name = "frontend"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 [dependencies]
 leptos = { workspace = true }
 wasm-bindgen = { workspace = true }
-web-sys = { version = "0.3", features = ["KeyboardEvent", "HtmlDivElement", "ScrollToOptions", "Element", "HtmlTextAreaElement"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+gloo-net = { version = "0.6", features = ["json"] }
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["KeyboardEvent", "HtmlDivElement", "ScrollToOptions", "Element", "HtmlTextAreaElement", "Window"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
