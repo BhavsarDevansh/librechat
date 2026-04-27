@@ -63,6 +63,7 @@ pub fn ChatView() -> impl IntoView {
         let api_messages: Vec<ApiChatMessage> = {
             let msgs = messages.get();
             msgs.iter()
+                .filter(|m| !(m.role == MessageRole::Assistant && m.is_error))
                 .map(|m| ApiChatMessage {
                     role: match m.role {
                         MessageRole::User => ApiMessageRole::User,

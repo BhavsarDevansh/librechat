@@ -276,6 +276,14 @@ a:focus-visible {
   50%      { opacity: 0.4; }
 }
 
+/* Respect reduced-motion preference — disable animation for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .message-loading {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 /* Error messages — left-aligned with error styling */
 .message-error {
   background-color: #7f1d1d;

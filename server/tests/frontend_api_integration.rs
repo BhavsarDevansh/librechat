@@ -167,7 +167,7 @@ fn test_chat_view_displays_thinking_indicator() {
 fn test_chat_input_accepts_disabled_prop() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        Regex::new(r"(?s)fn\s+ChatInput\s*\(.*disabled")
+        Regex::new(r"(?s)fn\s+ChatInput\s*\(.*?\bdisabled\b")
             .unwrap()
             .is_match(&source),
         "ChatInput must accept a `disabled` prop"
