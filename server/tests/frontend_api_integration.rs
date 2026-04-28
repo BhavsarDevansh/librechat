@@ -5,11 +5,32 @@
 //! the chat UI to the non-streaming backend API.
 
 use regex::Regex;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 /// Returns the normalized workspace root directory.
 fn workspace_root() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
+    static WORKSPACE_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let mut dir = Path::new(manifest_dir);
+        loop {
+            let candidate = dir.join("Cargo.toml");
+            if candidate.exists() {
+                if let Ok(contents) = std::fs::read_to_string(&candidate) {
+                    if contents.contains("[workspace]") {
+                        return dir.to_path_buf();
+                    }
+                }
+            }
+            dir = dir.parent().unwrap_or_else(|| {
+                panic!(
+                    "could not find workspace Cargo.toml above {}",
+                    manifest_dir
+                )
+            });
+        }
+    });
+    &WORKSPACE_ROOT
 }
 
 fn read_file(relative_path: &str) -> String {
@@ -167,7 +188,7 @@ fn test_chat_view_displays_thinking_indicator() {
 fn test_chat_input_accepts_disabled_prop() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        Regex::new(r"(?s)fn\s+ChatInput\s*\(.*?\bdisabled\b")
+        Regex::new(r"fn\s+ChatInput\s*\((?:[^)]|\([^)]*\))*\bdisabled\b")
             .unwrap()
             .is_match(&source),
         "ChatInput must accept a `disabled` prop"
@@ -178,7 +199,9 @@ fn test_chat_input_accepts_disabled_prop() {
 fn test_chat_input_disables_textarea_when_loading() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        Regex::new(r"disabled\s*=\s*").unwrap().is_match(&source),
+        Regex::new(r"<textarea[^>]*\bdisabled\s*=")
+            .unwrap()
+            .is_match(&source),
         "ChatInput textarea must bind the disabled attribute"
     );
 }

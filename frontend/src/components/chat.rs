@@ -75,7 +75,7 @@ pub fn ChatView() -> impl IntoView {
         };
 
         leptos::task::spawn_local(async move {
-            let result = api::send_chat_request(&api_messages, "").await;
+            let result = api::send_chat_request(&api_messages, api::DEFAULT_MODEL).await;
             set_loading.set(false);
 
             let assistant_id = next_id.get();
@@ -116,12 +116,7 @@ pub fn ChatView() -> impl IntoView {
 
     view! {
         <div class="flex-column-full">
-            <MessageList messages />
-            {move || loading.get().then(|| view! {
-                <div class="message-bubble message-assistant message-loading">
-                    "Thinking…"
-                </div>
-            })}
+            <MessageList messages loading />
             <ChatInput on_send disabled=loading />
         </div>
     }
@@ -132,12 +127,18 @@ pub fn ChatView() -> impl IntoView {
 ///
 /// Automatically scrolls to the bottom whenever new messages arrive.
 #[component]
-pub fn MessageList(messages: ReadSignal<Vec<ChatMessage>>) -> impl IntoView {
+pub fn MessageList(
+    messages: ReadSignal<Vec<ChatMessage>>,
+    /// When `true`, a "Thinking…" indicator is shown and the list scrolls to bottom.
+    #[prop(into)]
+    loading: Signal<bool>,
+) -> impl IntoView {
     let scroll_ref: NodeRef<leptos::html::Div> = NodeRef::new();
 
-    // Scroll to bottom whenever the message list changes.
+    // Scroll to bottom whenever the message list changes or loading toggles.
     Effect::new(move |_| {
         let _ = messages.get();
+        let _ = loading.get();
         if let Some(el) = scroll_ref.get() {
             let opts = web_sys::ScrollToOptions::new();
             opts.set_top(el.scroll_height() as f64);
@@ -160,6 +161,11 @@ pub fn MessageList(messages: ReadSignal<Vec<ChatMessage>>) -> impl IntoView {
                     {move || msg.content.clone()}
                 </div>
             </For>
+            {move || loading.get().then(|| view! {
+                <div class="message-bubble message-assistant message-loading">
+                    "Thinking…"
+                </div>
+            })}
         </div>
     }
 }

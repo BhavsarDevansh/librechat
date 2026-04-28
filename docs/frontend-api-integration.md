@@ -190,16 +190,15 @@ Unit tests in `frontend/src/api.rs::tests` cover:
 
 Run all tests: `cargo test`
 
+Run only the server integration tests:
+`cargo test -p server --test frontend_api_integration`
+
+Run only the frontend crate api module tests:
+`cargo test -p frontend api::tests`
+
 ## Migration / Upgrade Notes
 
 - The `is_error` field was added to `ChatMessage`. Any code constructing `ChatMessage` must set `is_error: false` for normal messages.
 - The `ChatInput` component now requires a `disabled` prop. Callers must pass a `Signal<bool>`.
 - The previous "Echo" simulation has been replaced with real backend API calls. To revert, remove the `spawn_local` block and restore the echo logic.
 - For streaming support, a future change would replace `send_chat_request` with an SSE-based streaming client and render tokens incrementally.
-Run all tests: `cargo test`
-
-Run only the server integration tests:
-`cargo test -p server --test frontend_api_integration`
-
-Run only the frontend crate api module tests:
-`cargo test -p frontend api::tests`
