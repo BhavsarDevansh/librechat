@@ -1,6 +1,6 @@
 [package]
 name = "frontend"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 
 [dependencies]
@@ -10,7 +10,16 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 gloo-net = { version = "0.6", features = ["json"] }
 js-sys = "0.3"
-web-sys = { version = "0.3", features = ["KeyboardEvent", "HtmlDivElement", "ScrollToOptions", "Element", "HtmlTextAreaElement", "Window"] }
+web-sys = { version = "0.3", features = [
+    "KeyboardEvent",
+    "HtmlDivElement",
+    "HtmlSelectElement",
+    "HtmlInputElement",
+    "ScrollToOptions",
+    "Element",
+    "HtmlTextAreaElement",
+    "Window",
+] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

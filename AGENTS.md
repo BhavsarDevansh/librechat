@@ -46,3 +46,6 @@ A "unit of work" is defined as any committable amount of work. For every unit of
 
 ## Resource Constraints Note
 Since this project targets Raspberry Pi and legacy hardware, avoid adding "heavy" dependencies. Every new crate must be evaluated for its impact on binary size and runtime memory overhead.
+
+## Branch Naming
+- Do NOT name branches starting with 'codex'. Use descriptive names like 'feat/ui-redesign' or 'fix/streaming-bug'.

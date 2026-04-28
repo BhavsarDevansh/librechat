@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use server::providers::{
     ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice,
-    ChunkChoice, ChunkDelta, LlmProvider, MessageRole, ProviderError, Usage,
+    ChunkChoice, ChunkDelta, LlmProvider, MessageRole, ModelInfo, ProviderError, Usage,
 };
 use tokio::sync::mpsc;
 
@@ -57,6 +57,12 @@ impl LlmProvider for MockProvider {
         });
 
         Ok(rx)
+    }
+
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(vec![ModelInfo {
+            id: "test-model".to_string(),
+        }])
     }
 
     fn name(&self) -> &str {

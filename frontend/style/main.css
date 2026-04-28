@@ -1,44 +1,78 @@
 /* ==========================================================================
    LibreChat Design System — Global Stylesheet
+   Premium luxury aesthetic · System font · Dark theme
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
    1. Design Tokens (CSS Custom Properties)
    -------------------------------------------------------------------------- */
 :root {
-  /* Colour palette — dark theme */
-  --color-bg-primary: #111827;
-  --color-bg-secondary: #1f2937;
-  --color-bg-input: #374151;
-  --color-text-primary: #f9fafb;
-  --color-text-secondary: #9ca3af;
-  --color-accent: #3b82f6;
-  --color-accent-hover: #2563eb;
-  --color-border: #4b5563;
+  /* Colour palette — premium dark theme */
+  --color-bg-primary: #0a0a0b;
+  --color-bg-secondary: #141416;
+  --color-bg-tertiary: #1a1a1e;
+  --color-bg-input: #1e1e23;
+  --color-bg-hover: #242429;
+  --color-text-primary: #ececec;
+  --color-text-secondary: #7a7a85;
+  --color-text-tertiary: #4a4a55;
+  --color-accent: #a78bfa;
+  --color-accent-hover: #8b6ff0;
+  --color-accent-muted: rgba(167, 139, 250, 0.12);
+  --color-border: #222228;
+  --color-border-subtle: #1a1a1f;
+  --color-error: #ef4444;
+  --color-error-bg: rgba(127, 29, 29, 0.4);
 
-  /* Typography */
-  --font-sans: system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+  /* Typography — system font stack */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+
+  /* Type scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+
+  /* Font weights */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
 
   /* Spacing scale */
+  --space-2xs: 0.125rem;
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
-  --space-md: 1rem;
-  --space-lg: 1.5rem;
-  --space-xl: 2rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+  --space-3xl: 3rem;
 
   /* Border radii */
-  --radius-sm: 0.25rem;
+  --radius-xs: 0.1875rem;
+  --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 
   /* Transitions */
-  --transition-fast: 150ms ease;
-  --transition-normal: 250ms ease;
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Layout */
+  --sidebar-width: 280px;
+  --sidebar-collapsed-width: 52px;
 }
 
 /* --------------------------------------------------------------------------
@@ -56,8 +90,8 @@ html,
 body {
   height: 100%;
   font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: var(--text-base);
+  line-height: 1.6;
   color: var(--color-text-primary);
   background-color: var(--color-bg-primary);
   -webkit-font-smoothing: antialiased;
@@ -66,24 +100,45 @@ body {
 
 a {
   color: var(--color-accent);
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 a:hover {
   color: var(--color-accent-hover);
 }
 
-a:focus-visible {
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
 /* --------------------------------------------------------------------------
    3. Layout Utilities
    -------------------------------------------------------------------------- */
 
-/* Full-height flex column — used for the app root and chat shell */
+/* Full-height flex column — used for the chat shell */
 .flex-column-full {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* App layout — horizontal split: sidebar + main */
+.app-layout {
+  display: flex;
+  height: 100%;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+/* Chat main content area */
+.chat-main {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -94,19 +149,19 @@ a:focus-visible {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-md);
+  padding: var(--space-xl) var(--space-2xl);
 }
 
 /* Sticky input bar pinned to the bottom */
 .sticky-input {
   flex-shrink: 0;
-  padding: var(--space-sm) var(--space-md);
-  border-top: 1px solid var(--color-border);
-  background-color: var(--color-bg-secondary);
+  padding: var(--space-md) var(--space-xl);
+  border-top: 1px solid var(--color-border-subtle);
+  background-color: var(--color-bg-primary);
 }
 
 /* --------------------------------------------------------------------------
-   4. App Root
+   4. App Root (retained for backward compat with tests)
    -------------------------------------------------------------------------- */
 .app-root {
   display: flex;
@@ -119,17 +174,20 @@ a:focus-visible {
 /* --------------------------------------------------------------------------
    5. Scrollbar Styling (Webkit)
    -------------------------------------------------------------------------- */
-.scroll-area::-webkit-scrollbar {
-  width: 6px;
+.scroll-area::-webkit-scrollbar,
+.thread-list::-webkit-scrollbar {
+  width: 4px;
 }
 
-.scroll-area::-webkit-scrollbar-track {
+.scroll-area::-webkit-scrollbar-track,
+.thread-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.scroll-area::-webkit-scrollbar-thumb {
+.scroll-area::-webkit-scrollbar-thumb,
+.thread-list::-webkit-scrollbar-thumb {
   background-color: var(--color-border);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 /* --------------------------------------------------------------------------
@@ -146,40 +204,331 @@ a:focus-visible {
   white-space: nowrap;
   border: 0;
 }
-/* --------------------------------------------------------------------------
-   7. Chat UI Components
-   -------------------------------------------------------------------------- */
 
-/* Message list container — uses the scroll-area layout utility */
+/* ==========================================================================
+   7. Sidebar
+   ========================================================================== */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  height: 100%;
+  background-color: var(--color-bg-secondary);
+  border-right: 1px solid var(--color-border-subtle);
+  transition: width var(--transition-normal), min-width var(--transition-normal);
+  overflow: hidden;
+}
+
+.sidebar.sidebar-collapsed {
+  width: var(--sidebar-collapsed-width);
+  min-width: var(--sidebar-collapsed-width);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border-subtle);
+  min-height: 52px;
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: var(--text-md);
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.sidebar-toggle:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-hover);
+}
+
+.sidebar-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* New chat button */
+.new-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: calc(100% - var(--space-xl));
+  margin: var(--space-md) auto 0;
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-accent);
+  background-color: var(--color-accent-muted);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.new-chat-btn:hover {
+  background-color: rgba(167, 139, 250, 0.18);
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+/* Thread list */
+.thread-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-sm) var(--space-md);
+}
+
+/* Individual thread item */
+.thread-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  position: relative;
+}
+
+.thread-item:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.thread-item.thread-active {
+  background-color: var(--color-bg-tertiary);
+}
+
+.thread-title {
+  flex: 1 1 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.thread-item.thread-active .thread-title {
+  color: var(--color-text-primary);
+}
+
+.thread-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.thread-item:hover .thread-delete {
+  opacity: 1;
+}
+
+.thread-delete:hover {
+  color: var(--color-error);
+}
+
+/* Sidebar footer */
+.sidebar-footer {
+  flex-shrink: 0;
+  padding: var(--space-md);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.settings-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.settings-btn:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-hover);
+}
+
+/* ==========================================================================
+   8. Chat Header & Model Selector
+   ========================================================================== */
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md) var(--space-xl);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background-color: var(--color-bg-primary);
+  flex-shrink: 0;
+}
+
+.model-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.model-select {
+  appearance: none;
+  padding: var(--space-xs) var(--space-lg) var(--space-xs) var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%237a7a85' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-sm) center;
+  padding-right: var(--space-xl);
+  min-width: 180px;
+}
+
+.model-select:hover {
+  border-color: var(--color-text-tertiary);
+}
+
+.model-select:focus {
+  border-color: var(--color-accent);
+}
+
+.model-custom-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.model-input {
+  min-width: 180px;
+  padding: var(--space-xs) var(--space-md);
+}
+
+.model-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.model-back-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-tertiary);
+}
+
+.model-error-hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+  cursor: help;
+}
+
+/* ==========================================================================
+   9. Chat Welcome Screen
+   ========================================================================== */
+.chat-welcome {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-3xl);
+}
+
+.welcome-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.welcome-subtitle {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  text-align: center;
+  max-width: 320px;
+}
+
+/* ==========================================================================
+   10. Chat UI — Messages
+   ========================================================================== */
+
+/* Message list container */
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-lg);
 }
 
 /* Base bubble style shared by all messages */
 .message-bubble {
-  max-width: 75%;
-  padding: var(--space-sm) var(--space-md);
+  max-width: 72%;
+  padding: var(--space-md) var(--space-lg);
   border-radius: var(--radius-lg);
   overflow-wrap: break-word;
-  line-height: 1.5;
+  line-height: 1.6;
+  font-size: var(--text-base);
 }
 
 /* User messages — right-aligned with accent background */
 .message-user {
   align-self: flex-end;
-  background-color: var(--color-accent);
-  color: #ffffff;
-  border-bottom-right-radius: var(--radius-sm);
+  background-color: var(--color-accent-muted);
+  color: var(--color-text-primary);
+  border: 1px solid rgba(167, 139, 250, 0.15);
+  border-bottom-right-radius: var(--radius-xs);
 }
 
-/* Assistant messages — left-aligned with secondary background */
+/* Assistant messages — left-aligned with subtle background */
 .message-assistant {
   align-self: flex-start;
-  background-color: var(--color-bg-secondary);
+  background-color: var(--color-bg-tertiary);
   color: var(--color-text-primary);
-  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-xs);
 }
 
 /* Chat input area — textarea + send button row */
@@ -197,8 +546,8 @@ a:focus-visible {
   resize: vertical;
   padding: var(--space-sm) var(--space-md);
   font-family: var(--font-sans);
-  font-size: 1rem;
-  line-height: 1.5;
+  font-size: var(--text-base);
+  line-height: 1.6;
   color: var(--color-text-primary);
   background-color: var(--color-bg-input);
   border: 1px solid var(--color-border);
@@ -212,7 +561,7 @@ a:focus-visible {
 }
 
 .chat-textarea::placeholder {
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
 }
 
 /* Send button */
@@ -220,8 +569,8 @@ a:focus-visible {
   flex-shrink: 0;
   padding: var(--space-sm) var(--space-lg);
   font-family: var(--font-sans);
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   color: #ffffff;
   background-color: var(--color-accent);
   border: none;
@@ -237,35 +586,201 @@ a:focus-visible {
 }
 
 .send-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* --------------------------------------------------------------------------
-   8. Responsive — Chat UI
-   -------------------------------------------------------------------------- */
-@media (max-width: 640px) {
-  .message-bubble {
-    max-width: 90%;
-  }
-
-  .chat-input-area {
-    flex-direction: column;
-  }
-
-  .send-btn {
-    width: 100%;
-  }
+/* ==========================================================================
+   11. Settings Modal
+   ========================================================================== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 100;
 }
 
-/* --------------------------------------------------------------------------
-   9. Loading & Error States
-   -------------------------------------------------------------------------- */
+.modal-content {
+  width: 100%;
+  max-width: 440px;
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.modal-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: var(--text-lg);
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.modal-close:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-hover);
+}
+
+.modal-body {
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-xl);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* Form controls */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.form-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.form-optional {
+  font-weight: var(--weight-normal);
+  color: var(--color-text-tertiary);
+  margin-left: var(--space-xs);
+}
+
+.form-input {
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.form-input:focus {
+  border-color: var(--color-accent);
+}
+
+.form-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.form-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+.input-row {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.input-row .form-input {
+  flex: 1 1 0;
+}
+
+.toggle-visibility-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: var(--text-base);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.toggle-visibility-btn:hover {
+  border-color: var(--color-text-tertiary);
+  color: var(--color-text-primary);
+}
+
+/* Modal buttons */
+.btn-primary {
+  padding: var(--space-sm) var(--space-lg);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: #ffffff;
+  background-color: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-accent-hover);
+}
+
+.btn-secondary {
+  padding: var(--space-sm) var(--space-lg);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-secondary:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-tertiary);
+}
+
+/* ==========================================================================
+   12. Loading & Error States
+   ========================================================================== */
 
 /* Loading indicator — animated "Thinking…" bubble */
 .message-loading {
   align-self: flex-start;
-  background-color: var(--color-bg-secondary);
+  background-color: var(--color-bg-tertiary);
   color: var(--color-text-secondary);
   font-style: italic;
   animation: pulse-opacity 1.4s ease-in-out infinite;
@@ -286,14 +801,54 @@ a:focus-visible {
 
 /* Error messages — left-aligned with error styling */
 .message-error {
-  background-color: #7f1d1d;
+  background-color: var(--color-error-bg);
   color: #fecaca;
-  border: 1px solid #991b1b;
-  border-bottom-left-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-bottom-left-radius: var(--radius-xs);
 }
 
 /* Disabled textarea while request is in-flight */
 .chat-textarea:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ==========================================================================
+   13. Responsive
+   ========================================================================== */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    z-index: 50;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.sidebar-collapsed {
+    box-shadow: none;
+  }
+
+  .message-bubble {
+    max-width: 88%;
+  }
+
+  .chat-input-area {
+    flex-direction: column;
+  }
+
+  .send-btn {
+    width: 100%;
+  }
+
+  .scroll-area {
+    padding: var(--space-lg);
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --sidebar-width: 260px;
+  }
 }

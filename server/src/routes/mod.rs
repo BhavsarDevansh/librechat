@@ -4,3 +4,4 @@ pub mod chat;
 pub mod chat_stream;
 pub mod error;
 pub mod health;
+pub mod models;

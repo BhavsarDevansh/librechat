@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use server::app;
 use server::providers::{
     ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChunkChoice,
-    ChunkDelta, LlmProvider, MessageRole, ProviderError,
+    ChunkDelta, LlmProvider, MessageRole, ModelInfo, ProviderError,
 };
 use server::state::AppState;
 use std::sync::{Arc, Mutex};
@@ -97,6 +97,12 @@ impl LlmProvider for StreamMockProvider {
         });
 
         Ok(rx)
+    }
+
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(vec![ModelInfo {
+            id: "test-model".to_string(),
+        }])
     }
 
     fn name(&self) -> &str {
