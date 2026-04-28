@@ -84,9 +84,7 @@ fn test_chat_input_component_defined() {
 fn test_app_uses_chat_view() {
     let source = read_file("frontend/src/lib.rs");
     assert!(
-        Regex::new(r"<ChatView\b")
-            .unwrap()
-            .is_match(&source),
+        Regex::new(r"<ChatView\b").unwrap().is_match(&source),
         "App component must render ChatView"
     );
 }

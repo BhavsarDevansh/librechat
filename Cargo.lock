@@ -511,9 +511,13 @@ dependencies = [
 
 [[package]]
 name = "frontend"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
+ "gloo-net",
+ "js-sys",
  "leptos",
+ "serde",
+ "serde_json",
  "wasm-bindgen",
  "web-sys",
 ]
