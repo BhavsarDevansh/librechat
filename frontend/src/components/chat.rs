@@ -44,6 +44,9 @@ pub fn ChatView() -> impl IntoView {
     let next_id = RwSignal::new(0usize);
 
     let on_send = move |text: String| {
+        if loading.get() {
+            return;
+        }
         let user_id = {
             let prev = next_id.get();
             next_id.update(|id| *id += 1);

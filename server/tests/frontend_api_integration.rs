@@ -13,6 +13,12 @@ use std::sync::LazyLock;
 /// Locates `pub fn <fn_name>` (or `fn <fn_name>`), then counts braces to
 /// find the matching closing `}` and returns the text between the braces.
 /// Returns `None` if the function cannot be found or braces are unbalanced.
+///
+/// **Limitation:** This function counts raw braces and does not skip braces
+/// inside string literals (`"..."`), char literals (`...`), line comments
+/// (`// ...`), or block comments (`/* ... */`). Bodies containing such
+/// constructs may be parsed incorrectly. For more robust extraction, use a
+/// proper parser such as `syn`.
 fn extract_function_body(source: &str, fn_name: &str) -> Option<String> {
     let pattern = format!(r"(?m)^(?:pub\s+)?fn\s+{}\s*[\(<]", regex::escape(fn_name));
     let re = Regex::new(&pattern).ok()?;
@@ -193,11 +199,11 @@ fn test_chat_message_has_is_error_field() {
 fn test_chat_view_uses_loading_signal() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        Regex::new(r"signal\s*\(\s*false\s*\)").unwrap().is_match(
+        Regex::new(r"let\s*\(.*\bloading\b.*\).*signal\s*\(\s*false\s*\)").unwrap().is_match(
             &extract_function_body(&source, "ChatView")
                 .expect("ChatView function must exist in chat.rs"),
         ),
-        "ChatView must initialise a loading signal with `signal(false)`"
+        "ChatView must declare `let (loading, …) = signal(false)`"
     );
 }
 
