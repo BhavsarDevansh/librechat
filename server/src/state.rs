@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 
 /// Default static directory as a relative path resolved against the process's
 /// current working directory at runtime.
-const DEFAULT_STATIC_DIR: &str = "../frontend/dist";
+const DEFAULT_STATIC_DIR: &str = "frontend/dist";
 
 /// Environment variable key for overriding the static directory.
 const STATIC_DIR_ENV: &str = "LIBRECHAT_STATIC_DIR";
@@ -21,10 +21,10 @@ const STATIC_DIR_ENV: &str = "LIBRECHAT_STATIC_DIR";
 ///
 /// Holds the configured LLM provider and the directory path from which static
 /// frontend assets are served.
-/// The directory defaults to the relative path `../frontend/dist`, resolved
+/// The directory defaults to the relative path `frontend/dist`, resolved
 /// against the process's current working directory (CWD) at runtime via
-/// [`resolve_static_dir`]. This only matches the binary's directory when the
-/// server is launched from the workspace root (e.g. via `cargo run`).
+/// [`resolve_static_dir`]. This only matches when the server is launched from the
+/// workspace root (e.g. via `cargo run` from the workspace root).
 ///
 /// Override the default by setting the `LIBRECHAT_STATIC_DIR` environment
 /// variable or by calling [`AppState::with_static_dir`] with an absolute path
@@ -118,7 +118,7 @@ impl Default for AppState {
 /// Resolve the static directory path.
 ///
 /// Checks the `LIBRECHAT_STATIC_DIR` environment variable first;
-/// if unset, returns the default relative path `../frontend/dist` resolved
+/// if unset, returns the default relative path `frontend/dist` resolved
 /// against the process's current working directory.
 fn resolve_static_dir() -> PathBuf {
     std::env::var(STATIC_DIR_ENV)

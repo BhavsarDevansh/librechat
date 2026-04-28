@@ -20,7 +20,7 @@ frontend server required.
    ```bash
    cargo run -p server
    ```
-   The server starts and logs: `Listening on 0.0.0.0:3000`
+   The server starts and logs: `Listening on 127.0.0.1:3000`
 
 3. **Open the app**
    - Visit `http://localhost:3000/` in your browser

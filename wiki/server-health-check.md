@@ -13,7 +13,7 @@ chat API and static file serving) will build on.
    ```bash
    cargo run -p server
    ```
-   The server starts and logs: `Listening on 0.0.0.0:3000`
+   The server starts and logs: `Listening on 127.0.0.1:3000`
 
 2. **Check health**
    ```bash

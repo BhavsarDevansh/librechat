@@ -13,7 +13,7 @@ main.rs
   └─ resolves port from LIBRECHAT_PORT env var (default 3000)
   └─ resolves static dir from LIBRECHAT_STATIC_DIR env var (default ../frontend/dist)
   └─ initialises tracing_subscriber with env-filter
-  └─ binds TcpListener to 0.0.0.0:{port}
+  └─ binds TcpListener to 127.0.0.1:{port}
   └─ calls app(AppState::new()) to build the Router
   └─ serves via axum::serve
 
