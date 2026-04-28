@@ -19,9 +19,9 @@ User types message → ChatInput::on_send
 
 ```text
 ChatView (owns signal<Vec<ChatMessage>>, signal<bool> loading)
-├── MessageList (receives ReadSignal<Vec<ChatMessage>>)
-│   └── For each message → <div class="message-bubble message-{role}[-message-error]">
-├── Loading indicator (conditional on loading signal)
+├── MessageList (receives ReadSignal<Vec<ChatMessage>>, Signal<bool> loading)
+│   ├── For each message → <div class="message-bubble message-{role}[-message-error]">
+│   └── Loading indicator (conditional on loading signal — "Thinking…" bubble)
 └── ChatInput (receives on_send + disabled signal)
     └── textarea + send-btn (both disabled when loading = true)
 ```
@@ -140,7 +140,8 @@ Added `is_error: bool` field. When `true`, the message bubble is styled with the
 - On send: appends User message, sets `loading = true`, spawns `send_chat_request` via `leptos::task::spawn_local`.
 - On response success: appends Assistant message, sets `loading = false`.
 - On response error: appends error message with `is_error = true`, sets `loading = false`.
-- Renders a "Thinking…" loading indicator conditionally between `MessageList` and `ChatInput`.
+- On empty choices: appends error message with `is_error = true` and content `"(empty response from model)"`, sets `loading = false`.
+- The `MessageList` child receives the `loading` signal and renders a "Thinking…" indicator inside the message list when `loading` is `true`.
 
 #### `ChatInput` (Updated)
 
@@ -177,7 +178,7 @@ Structural tests live in `server/tests/frontend_api_integration.rs` and verify:
 - `frontend/src/api.rs` exists and defines expected types and functions
 - `frontend/src/lib.rs` declares `mod api`
 - `ChatMessage` has `is_error: bool` field
-- `ChatView` uses `signal(false)` for loading, calls `send_chat_request`, and shows "Thinking…"
+- `ChatView` uses `signal(false)` for loading and calls `send_chat_request`; `MessageList` renders the "Thinking…" indicator
 - `ChatInput` accepts a `disabled` prop and binds it to textarea/button
 - CSS defines `.message-error` and `.message-loading` classes
 - `frontend/Cargo.toml` includes `gloo-net`, `serde`, and `js-sys`

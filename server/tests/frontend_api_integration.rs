@@ -8,6 +8,40 @@ use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+/// Extracts the body of a top-level function named `fn_name` from `source`.
+///
+/// Locates `pub fn <fn_name>` (or `fn <fn_name>`), then counts braces to
+/// find the matching closing `}` and returns the text between the braces.
+/// Returns `None` if the function cannot be found or braces are unbalanced.
+fn extract_function_body(source: &str, fn_name: &str) -> Option<String> {
+    let pattern = format!(r"(?m)^(?:pub\s+)?fn\s+{}\s*[\(<]", regex::escape(fn_name));
+    let re = Regex::new(&pattern).ok()?;
+    let mat = re.find(source)?;
+    let start = mat.start();
+
+    let after_sig = &source[start..];
+    let brace_pos = after_sig.find('{')?;
+    let body_start = start + brace_pos + 1;
+
+    let mut depth = 1i32;
+    let mut pos = body_start;
+    let bytes = source.as_bytes();
+    while pos < bytes.len() && depth > 0 {
+        match bytes[pos] {
+            b'{' => depth += 1,
+            b'}' => depth -= 1,
+            _ => {}
+        }
+        pos += 1;
+    }
+
+    if depth == 0 {
+        Some(source[body_start..pos - 1].to_string())
+    } else {
+        None
+    }
+}
+
 /// Returns the normalized workspace root directory.
 fn workspace_root() -> &'static Path {
     static WORKSPACE_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -159,9 +193,10 @@ fn test_chat_message_has_is_error_field() {
 fn test_chat_view_uses_loading_signal() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        Regex::new(r"signal\s*\(\s*false\s*\)")
-            .unwrap()
-            .is_match(&source),
+        Regex::new(r"signal\s*\(\s*false\s*\)").unwrap().is_match(
+            &extract_function_body(&source, "ChatView")
+                .expect("ChatView function must exist in chat.rs"),
+        ),
         "ChatView must initialise a loading signal with `signal(false)`"
     );
 }
@@ -169,18 +204,22 @@ fn test_chat_view_uses_loading_signal() {
 #[test]
 fn test_chat_view_calls_send_chat_request() {
     let source = read_file("frontend/src/components/chat.rs");
+    let body = extract_function_body(&source, "ChatView")
+        .expect("ChatView function must exist in chat.rs");
     assert!(
-        source.contains("send_chat_request"),
-        "ChatView must call send_chat_request from the api module"
+        body.contains("send_chat_request(") || body.contains("api::send_chat_request("),
+        "ChatView body must call send_chat_request() from the api module"
     );
 }
 
 #[test]
 fn test_chat_view_displays_thinking_indicator() {
     let source = read_file("frontend/src/components/chat.rs");
+    let body = extract_function_body(&source, "MessageList")
+        .expect("MessageList function must exist in chat.rs");
     assert!(
-        source.contains("Thinking"),
-        "ChatView must display a 'Thinking' indicator while loading"
+        body.contains("\"Thinking"),
+        "MessageList body must contain the 'Thinking' text indicator"
     );
 }
 

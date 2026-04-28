@@ -83,21 +83,27 @@ pub fn ChatView() -> impl IntoView {
 
             match result {
                 Ok(response) => {
-                    let content = response
-                        .choices
-                        .first()
-                        .map(|c| c.message.content.clone())
-                        .unwrap_or_else(|| "(empty response)".to_string());
-
-                    let assistant_msg = ChatMessage {
-                        id: assistant_id,
-                        role: MessageRole::Assistant,
-                        content,
-                        is_error: false,
-                    };
-                    set_messages.update(move |msgs| {
-                        msgs.push(assistant_msg);
-                    });
+                    if let Some(choice) = response.choices.first() {
+                        let assistant_msg = ChatMessage {
+                            id: assistant_id,
+                            role: MessageRole::Assistant,
+                            content: choice.message.content.clone(),
+                            is_error: false,
+                        };
+                        set_messages.update(move |msgs| {
+                            msgs.push(assistant_msg);
+                        });
+                    } else {
+                        let error_msg = ChatMessage {
+                            id: assistant_id,
+                            role: MessageRole::Assistant,
+                            content: "(empty response from model)".to_string(),
+                            is_error: true,
+                        };
+                        set_messages.update(move |msgs| {
+                            msgs.push(error_msg);
+                        });
+                    }
                 }
                 Err(error) => {
                     let error_msg = ChatMessage {
