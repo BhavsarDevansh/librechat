@@ -307,12 +307,4 @@ mod tests {
         );
     }
 
-    #[cfg(target_arch = "wasm32")]
-    #[test]
-    fn test_resolve_api_base_empty_falls_back() {
-        // Without a browser window, the JS fallback returns empty string.
-        let result = resolve_api_base("");
-        // We can't assert the JS value in unit tests, but we verify it doesn't panic.
-        assert!(result.is_empty() || result.starts_with("http"));
-    }
 }

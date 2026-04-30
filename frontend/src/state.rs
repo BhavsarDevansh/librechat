@@ -60,7 +60,7 @@ impl AppState {
             active_thread_id: RwSignal::new(None),
             next_thread_id: RwSignal::new(0),
             settings: RwSignal::new(AppSettings::default()),
-            selected_model: RwSignal::new("llama3".to_string()),
+            selected_model: RwSignal::new(api::DEFAULT_MODEL.to_string()),
             sidebar_collapsed: RwSignal::new(false),
             settings_open: RwSignal::new(false),
             available_models: RwSignal::new(Vec::new()),
@@ -94,21 +94,37 @@ impl AppState {
     /// Delete a thread by ID. If the deleted thread was active, switch to
     /// the most recent remaining thread (or None if empty).
     pub fn delete_thread(&self, thread_id: ThreadId) {
-        self.threads
-            .update(|threads| threads.retain(|t| t.id != thread_id));
-        let current = self.active_thread_id.get();
-        if current == Some(thread_id) {
-            let threads = self.threads.get();
-            self.active_thread_id.set(threads.last().map(|t| t.id));
-        }
+        self.threads.update(|threads| {
+            threads.retain(|t| t.id != thread_id);
+            let current = self.active_thread_id.get();
+            if current == Some(thread_id) {
+                self.active_thread_id.set(threads.last().map(|t| t.id));
+            }
+        });
     }
 
-    /// Get the active thread's messages as a signal-friendly structure.
+    /// Get the active thread by value (clones the entire thread including messages).
     /// Returns None if no thread is active.
+    #[allow(dead_code)]
     pub fn active_thread(&self) -> Option<ChatThread> {
         let threads = self.threads.get();
         let active_id = self.active_thread_id.get()?;
         threads.into_iter().find(|t| t.id == active_id)
+    }
+
+    /// Get the active thread's messages directly, avoiding cloning the full ChatThread.
+    /// Returns an empty Vec if no thread is active.
+    pub fn active_messages(&self) -> Vec<super::components::chat::ChatMessage> {
+        let threads = self.threads.get();
+        let active_id = match self.active_thread_id.get() {
+            Some(id) => id,
+            None => return Vec::new(),
+        };
+        threads
+            .iter()
+            .find(|t| t.id == active_id)
+            .map(|t| t.messages.clone())
+            .unwrap_or_default()
     }
 
     /// Fetch the list of available models from the configured provider.

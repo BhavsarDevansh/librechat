@@ -4,6 +4,7 @@
 //! configured LLM provider.
 
 use crate::providers::ModelInfo;
+use crate::routes::error::{error_response, map_provider_error};
 use crate::state::AppState;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -27,12 +28,9 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
             (StatusCode::OK, axum::Json(ModelsResponse { models })).into_response()
         }
         Err(error) => {
-            error!(error = %error, "failed to list models");
-            (
-                StatusCode::BAD_GATEWAY,
-                axum::Json(serde_json::json!({ "error": error.to_string() })),
-            )
-                .into_response()
+            let (status, message) = map_provider_error(&error);
+            error!(status = %status, error = %error, "failed to list models");
+            error_response(status, message)
         }
     }
 }

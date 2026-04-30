@@ -351,6 +351,15 @@ textarea:focus-visible {
   opacity: 1;
 }
 
+.thread-delete:focus,
+.thread-delete:focus-visible {
+  opacity: 1;
+}
+
+.thread-item:focus-within .thread-delete {
+  opacity: 1;
+}
+
 .thread-delete:hover {
   color: var(--color-error);
 }
@@ -852,3 +861,4 @@ textarea:focus-visible {
     --sidebar-width: 260px;
   }
 }
+  --font-sans: system-ui, -apple-system, "segoe ui", roboto, helvetica, arial, sans-serif;

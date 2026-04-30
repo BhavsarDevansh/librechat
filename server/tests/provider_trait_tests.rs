@@ -109,6 +109,14 @@ async fn test_mock_provider_chat_completion_stream() {
 }
 
 #[tokio::test]
+async fn test_mock_provider_list_models() {
+    let provider = MockProvider;
+    let models = provider.list_models().await.unwrap();
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].id, "test-model");
+}
+
+#[tokio::test]
 async fn test_provider_error_display() {
     let err = ProviderError::ConnectionFailed("timeout".to_string());
     assert_eq!(format!("{err}"), "Connection failed: timeout");

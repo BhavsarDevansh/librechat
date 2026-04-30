@@ -40,6 +40,8 @@ pub fn ModelSelector() -> impl IntoView {
     let (custom_input, set_custom_input) = signal(false);
 
     // Refresh models on mount.
+    // Note: Effect::new with no tracked signal reads runs exactly once on mount,
+    // so state.refresh_models() is invoked only at component creation, not on every render.
     Effect::new(move |_| {
         state.refresh_models();
     });
@@ -100,7 +102,7 @@ pub fn ModelSelector() -> impl IntoView {
                     >
                         {
                             let id = model.id.clone();
-                            let id_display = model.id.clone();
+                            let id_display = id.clone();
                             let id_selected = model.id.clone();
                             view! {
                                 <option value=move || id.clone() selected=move || state.selected_model.get() == id_selected>
@@ -139,10 +141,7 @@ pub fn ChatView() -> impl IntoView {
     let next_id = RwSignal::new(0usize);
 
     let active_messages = move || {
-        state
-            .active_thread()
-            .map(|t| t.messages)
-            .unwrap_or_default()
+        state.active_messages()
     };
 
     let on_send = move |text: String| {
@@ -181,8 +180,9 @@ pub fn ChatView() -> impl IntoView {
             if let Some(thread) = threads.iter_mut().find(|t| t.id == active_id) {
                 thread.messages.push(user_msg);
                 if is_first_message {
-                    let title = if text.len() > 30 {
-                        format!("{}…", &text[..30])
+                    let title = if text.chars().count() > 30 {
+                        let truncated: String = text.chars().take(30).collect();
+                        format!("{truncated}…")
                     } else {
                         text.clone()
                     };

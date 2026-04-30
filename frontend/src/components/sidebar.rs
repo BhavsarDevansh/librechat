@@ -73,8 +73,14 @@ pub fn Sidebar() -> impl IntoView {
                                         class="thread-delete"
                                         aria-label=move || format!("Delete {}", title_aria)
                                         on:click=move |ev| {
-                                            ev.stop_propagation();
-                                            state.delete_thread(thread.id);
+                                           ev.stop_propagation();
+                                           state.delete_thread(thread.id);
+                                       }
+                                        on:keydown=move |ev: web_sys::KeyboardEvent| {
+                                            if ev.key() == "Enter" {
+                                                ev.stop_propagation();
+                                                state.delete_thread(thread.id);
+                                            }
                                         }
                                     >
                                         "×"

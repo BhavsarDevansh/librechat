@@ -463,13 +463,20 @@ async fn process_sse_event(
 
 /// Truncate a byte slice to a string, limiting to `max_bytes`.
 /// Used for error response bodies that may be very large.
+/// Finds the last valid UTF-8 character boundary at or before `max_bytes`
+/// to avoid slicing in the middle of a multi-byte sequence.
 fn truncate_bytes_to_string(bytes: &[u8], max_bytes: usize) -> String {
-    let truncated = if bytes.len() > max_bytes {
-        &bytes[..max_bytes]
+    let limit = if bytes.len() > max_bytes {
+        // Walk backwards from max_bytes to find a valid UTF-8 char boundary.
+        let mut end = max_bytes;
+        while end > 0 && std::str::from_utf8(&bytes[..end]).is_err() {
+            end -= 1;
+        }
+        if end == 0 { max_bytes } else { end }
     } else {
-        bytes
+        bytes.len()
     };
-    String::from_utf8_lossy(truncated).into_owned()
+    String::from_utf8_lossy(&bytes[..limit]).into_owned()
 }
 
 #[cfg(test)]
