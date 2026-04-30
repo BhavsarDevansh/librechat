@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use server::providers::{
     ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice,
-    ChunkChoice, ChunkDelta, LlmProvider, MessageRole, ProviderError, Usage,
+    ChunkChoice, ChunkDelta, LlmProvider, MessageRole, ModelInfo, ProviderError, Usage,
 };
 use tokio::sync::mpsc;
 
@@ -59,6 +59,12 @@ impl LlmProvider for MockProvider {
         Ok(rx)
     }
 
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(vec![ModelInfo {
+            id: "test-model".to_string(),
+        }])
+    }
+
     fn name(&self) -> &str {
         "MockProvider"
     }
@@ -100,6 +106,14 @@ async fn test_mock_provider_chat_completion_stream() {
     let mut rx = provider.chat_completion_stream(request).await.unwrap();
     let chunk = rx.recv().await.unwrap().unwrap();
     assert_eq!(chunk.choices[0].delta.content.as_ref().unwrap(), "Hello");
+}
+
+#[tokio::test]
+async fn test_mock_provider_list_models() {
+    let provider = MockProvider;
+    let models = provider.list_models().await.unwrap();
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].id, "test-model");
 }
 
 #[tokio::test]

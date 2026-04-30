@@ -63,10 +63,7 @@ fn workspace_root() -> &'static Path {
                 }
             }
             dir = dir.parent().unwrap_or_else(|| {
-                panic!(
-                    "could not find workspace Cargo.toml above {}",
-                    manifest_dir
-                )
+                panic!("could not find workspace Cargo.toml above {}", manifest_dir)
             });
         }
     });
@@ -199,10 +196,12 @@ fn test_chat_message_has_is_error_field() {
 fn test_chat_view_uses_loading_signal() {
     let source = read_file("frontend/src/components/chat.rs");
     assert!(
-        Regex::new(r"let\s*\(.*\bloading\b.*\).*signal\s*\(\s*false\s*\)").unwrap().is_match(
-            &extract_function_body(&source, "ChatView")
-                .expect("ChatView function must exist in chat.rs"),
-        ),
+        Regex::new(r"let\s*\(.*\bloading\b.*\).*signal\s*\(\s*false\s*\)")
+            .unwrap()
+            .is_match(
+                &extract_function_body(&source, "ChatView")
+                    .expect("ChatView function must exist in chat.rs"),
+            ),
         "ChatView must declare `let (loading, …) = signal(false)`"
     );
 }

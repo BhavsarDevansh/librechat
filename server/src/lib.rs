@@ -40,6 +40,7 @@ const DEFAULT_ALLOWED_ORIGINS: &[&str] = &[
 ///
 /// Routes:
 /// - `GET /health` — returns `{"status":"ok"}` with `200 OK`
+/// - `GET /api/models` — returns available models from the configured provider
 /// - `POST /api/chat/completions` — proxies non-streaming chat completions to
 ///   the configured provider
 /// - `POST /api/chat/completions/stream` — streams chat completions to the
@@ -67,6 +68,7 @@ pub fn app(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(routes::health::health))
+        .route("/api/models", get(routes::models::list_models))
         .route("/api/chat/completions", post(routes::chat::chat_completion))
         .route(
             "/api/chat/completions/stream",

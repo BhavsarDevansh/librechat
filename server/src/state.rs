@@ -1,7 +1,7 @@
 //! Shared application state for the Axum server.
 
 use crate::providers::{
-    ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, LlmProvider,
+    ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, LlmProvider, ModelInfo,
     OpenAiProvider, ProviderError,
 };
 use async_trait::async_trait;
@@ -54,6 +54,12 @@ impl LlmProvider for NoopProvider {
         &self,
         _request: ChatCompletionRequest,
     ) -> Result<mpsc::Receiver<Result<ChatCompletionChunk, ProviderError>>, ProviderError> {
+        Err(ProviderError::ConnectionFailed(
+            "LLM provider not configured for this AppState".to_string(),
+        ))
+    }
+
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
         Err(ProviderError::ConnectionFailed(
             "LLM provider not configured for this AppState".to_string(),
         ))

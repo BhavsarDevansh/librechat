@@ -9,6 +9,13 @@ mod types;
 pub use openai::OpenAiProvider;
 pub use types::*;
 
+/// A single model returned by [`LlmProvider::list_models`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ModelInfo {
+    /// The model identifier (e.g. "llama3", "gpt-4o").
+    pub id: String,
+}
+
 use async_trait::async_trait;
 
 /// A trait that all LLM provider backends must implement.
@@ -34,6 +41,9 @@ pub trait LlmProvider: Send + Sync {
         tokio::sync::mpsc::Receiver<Result<ChatCompletionChunk, ProviderError>>,
         ProviderError,
     >;
+
+    /// List available models from this provider.
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError>;
 
     /// Human-readable name for this provider (e.g., "Ollama", "OpenAI").
     fn name(&self) -> &str;

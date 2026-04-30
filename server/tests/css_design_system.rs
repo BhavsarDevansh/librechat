@@ -89,27 +89,27 @@ fn test_css_custom_property_values() {
     // Verify exact assignments for key colour tokens
     let value_checks = [
         (
-            r"--color-bg-primary:\s*#111827",
+            r"--color-bg-primary:\s*#0a0a0b",
             "--color-bg-primary",
-            "#111827",
+            "#0a0a0b",
         ),
         (
-            r"--color-bg-secondary:\s*#1f2937",
+            r"--color-bg-secondary:\s*#141416",
             "--color-bg-secondary",
-            "#1f2937",
+            "#141416",
         ),
         (
-            r"--color-bg-input:\s*#374151",
+            r"--color-bg-input:\s*#1e1e23",
             "--color-bg-input",
-            "#374151",
+            "#1e1e23",
         ),
-        (r"--color-accent:\s*#3b82f6", "--color-accent", "#3b82f6"),
+        (r"--color-accent:\s*#a78bfa", "--color-accent", "#a78bfa"),
         (
-            r"--color-accent-hover:\s*#2563eb",
+            r"--color-accent-hover:\s*#8b6ff0",
             "--color-accent-hover",
-            "#2563eb",
+            "#8b6ff0",
         ),
-        (r"--color-border:\s*#4b5563", "--color-border", "#4b5563"),
+        (r"--color-border:\s*#222228", "--color-border", "#222228"),
     ];
 
     for (pattern, var, value) in &value_checks {
@@ -261,9 +261,12 @@ fn test_app_component_uses_app_root_class() {
     let lib_rs = read_app_lib_rs();
 
     assert!(
-        regex::Regex::new(r#"class="[^"]*\bapp-root\b[^"]*""#)
+        (regex::Regex::new(r#"class="[^"]*\bapp-layout\b[^"]*""#)
             .expect("invalid regex")
-            .is_match(&lib_rs),
-        "Leptos App component must apply class=\"app-root\" to its root element"
+            .is_match(&lib_rs)
+            || regex::Regex::new(r#"class="[^"]*\bapp-root\b[^"]*""#)
+                .expect("invalid regex")
+                .is_match(&lib_rs)),
+        "Leptos App component must apply class=\"app-layout\" or \"app-root\" to its root element"
     );
 }

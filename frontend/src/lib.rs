@@ -1,15 +1,25 @@
 mod api;
 mod components;
+mod state;
 
 use components::chat::ChatView;
+use components::settings::SettingsModal;
+use components::sidebar::Sidebar;
 use leptos::prelude::*;
+use state::AppState;
 use wasm_bindgen::prelude::*;
 
 #[component]
 pub fn App() -> impl IntoView {
+    AppState::provide();
+
     view! {
-        <div class="app-root">
-            <ChatView />
+        <div class="app-layout">
+            <Sidebar />
+            <main class="chat-main">
+                <ChatView />
+            </main>
+            <SettingsModal />
         </div>
     }
 }
