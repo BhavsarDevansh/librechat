@@ -59,7 +59,8 @@ pub fn Sidebar() -> impl IntoView {
                                 state.active_thread_id.set(Some(thread.id));
                             }
                             on:keydown=move |ev: web_sys::KeyboardEvent| {
-                                if ev.key() == "Enter" {
+                                if ev.key() == "Enter" || ev.key() == " " {
+                                    ev.prevent_default();
                                     state.active_thread_id.set(Some(thread.id));
                                 }
                             }
@@ -77,8 +78,9 @@ pub fn Sidebar() -> impl IntoView {
                                            state.delete_thread(thread.id);
                                        }
                                         on:keydown=move |ev: web_sys::KeyboardEvent| {
-                                            if ev.key() == "Enter" {
+                                            if ev.key() == "Enter" || ev.key() == " " {
                                                 ev.stop_propagation();
+                                                ev.prevent_default();
                                                 state.delete_thread(thread.id);
                                             }
                                         }

@@ -364,6 +364,13 @@ textarea:focus-visible {
   color: var(--color-error);
 }
 
+/* Show delete button on touch devices */
+@media (pointer: coarse) {
+  .thread-delete {
+    opacity: 1;
+  }
+}
+
 /* Sidebar footer */
 .sidebar-footer {
   flex-shrink: 0;
@@ -861,4 +868,4 @@ textarea:focus-visible {
     --sidebar-width: 260px;
   }
 }
-  --font-sans: system-ui, -apple-system, "segoe ui", roboto, helvetica, arial, sans-serif;
+

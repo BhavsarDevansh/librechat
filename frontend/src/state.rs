@@ -50,6 +50,8 @@ pub struct AppState {
     pub models_loading: RwSignal<bool>,
     /// Error message from model fetch, if any.
     pub models_error: RwSignal<Option<String>>,
+    /// Monotonic token to discard stale model-fetch responses.
+    pub models_request_id: RwSignal<u64>,
 }
 
 impl AppState {
@@ -66,6 +68,7 @@ impl AppState {
             available_models: RwSignal::new(Vec::new()),
             models_loading: RwSignal::new(false),
             models_error: RwSignal::new(None),
+            models_request_id: RwSignal::new(0),
         };
         provide_context(state);
         state
@@ -107,24 +110,26 @@ impl AppState {
     /// Returns None if no thread is active.
     #[allow(dead_code)]
     pub fn active_thread(&self) -> Option<ChatThread> {
-        let threads = self.threads.get();
         let active_id = self.active_thread_id.get()?;
-        threads.into_iter().find(|t| t.id == active_id)
+        self.threads.with(|threads| {
+            threads.iter().find(|t| t.id == active_id).cloned()
+        })
     }
 
     /// Get the active thread's messages directly, avoiding cloning the full ChatThread.
     /// Returns an empty Vec if no thread is active.
     pub fn active_messages(&self) -> Vec<super::components::chat::ChatMessage> {
-        let threads = self.threads.get();
         let active_id = match self.active_thread_id.get() {
             Some(id) => id,
             None => return Vec::new(),
         };
-        threads
-            .iter()
-            .find(|t| t.id == active_id)
-            .map(|t| t.messages.clone())
-            .unwrap_or_default()
+        self.threads.with(|threads| {
+            threads
+                .iter()
+                .find(|t| t.id == active_id)
+                .map(|t| t.messages.clone())
+                .unwrap_or_default()
+        })
     }
 
     /// Fetch the list of available models from the configured provider.
@@ -133,17 +138,23 @@ impl AppState {
         let auth_key = self.settings.get().auth_key.clone();
         self.models_loading.set(true);
         self.models_error.set(None);
+        let request_id = self.models_request_id.get() + 1;
+        self.models_request_id.set(request_id);
 
+        let state = *self;
         leptos::task::spawn_local(async move {
-            let state = Self::expect();
             match api::fetch_models(&endpoint, &auth_key).await {
                 Ok(models) => {
-                    state.available_models.set(models);
-                    state.models_loading.set(false);
+                    if state.models_request_id.get() == request_id {
+                        state.available_models.set(models);
+                        state.models_loading.set(false);
+                    }
                 }
                 Err(error) => {
-                    state.models_error.set(Some(error.to_string()));
-                    state.models_loading.set(false);
+                    if state.models_request_id.get() == request_id {
+                        state.models_error.set(Some(error.to_string()));
+                        state.models_loading.set(false);
+                    }
                 }
             }
         });
