@@ -53,7 +53,8 @@ pub fn Sidebar() -> impl IntoView {
                         <div
                             class="thread-item"
                             class:thread-active=move || state.active_thread_id.get() == Some(thread.id)
-                            role="listitem"
+                            role="button"
+                            aria-selected=move || state.active_thread_id.get() == Some(thread.id)
                             tabindex="0"
                             on:click=move |_| {
                                 state.active_thread_id.set(Some(thread.id));

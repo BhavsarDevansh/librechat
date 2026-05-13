@@ -153,6 +153,7 @@ impl AppState {
                 Err(error) => {
                     if state.models_request_id.get() == request_id {
                         state.models_error.set(Some(error.to_string()));
+                        state.available_models.set(Vec::new());
                         state.models_loading.set(false);
                     }
                 }
