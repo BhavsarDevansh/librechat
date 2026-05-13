@@ -207,7 +207,7 @@ fn test_chat_view_uses_loading_signal() {
 }
 
 #[test]
-fn test_chat_view_calls_send_chat_request() {
+fn test_chat_view_calls_stream_chat_request() {
     let source = read_file("frontend/src/components/chat.rs");
     let body = extract_function_body(&source, "ChatView")
         .expect("ChatView function must exist in chat.rs");

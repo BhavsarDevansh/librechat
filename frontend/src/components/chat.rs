@@ -128,9 +128,11 @@ pub fn ModelSelector() -> impl IntoView {
 /// [`ChatInput`].
 ///
 /// On send, the user message is appended to the active thread, a loading
-/// state is set, and [`send_chat_request`] is called. On success the
-/// assistant response is appended and loading cleared; on error an error
-/// message bubble is appended and loading cleared.
+/// state is set, and [`stream_chat_request`] is called. An empty assistant
+/// placeholder bubble is created and streamed deltas are applied
+/// incrementally to that placeholder. On error the placeholder is mutated
+/// into an error bubble and loading is cleared; on empty response it is
+/// replaced with an error message.
 ///
 /// If no thread is active, a welcome screen is shown with a prompt to
 /// start a chat.
@@ -230,8 +232,6 @@ pub fn ChatView() -> impl IntoView {
                 });
             }
         });
-
-        set_loading.set(true);
 
         leptos::task::spawn_local(async move {
             let result =

@@ -65,8 +65,7 @@ impl SseParser {
                 continue;
             }
 
-            if let Some(data) = line.strip_prefix("data") {
-                let data = data.strip_prefix(':').unwrap_or(data);
+            if let Some(data) = line.strip_prefix("data:") {
                 let data = data.strip_prefix(' ').unwrap_or(data);
                 if !self.pending_data.is_empty() {
                     self.pending_data.push('\n');
@@ -75,8 +74,7 @@ impl SseParser {
                 continue;
             }
 
-            if let Some(event) = line.strip_prefix("event") {
-                let event = event.strip_prefix(':').unwrap_or(event);
+            if let Some(event) = line.strip_prefix("event:") {
                 let event = event.strip_prefix(' ').unwrap_or(event);
                 self.pending_event_type = event.to_string();
                 continue;
@@ -95,12 +93,14 @@ impl SseParser {
             let line = std::mem::take(&mut self.buffer);
             let line = line.strip_suffix('\r').unwrap_or(&line);
 
-            if let Some(data) = line.strip_prefix("data: ") {
+            if let Some(data) = line.strip_prefix("data:") {
+                let data = data.strip_prefix(' ').unwrap_or(data);
                 if !self.pending_data.is_empty() {
                     self.pending_data.push('\n');
                 }
                 self.pending_data.push_str(data);
-            } else if let Some(event) = line.strip_prefix("event: ") {
+            } else if let Some(event) = line.strip_prefix("event:") {
+                let event = event.strip_prefix(' ').unwrap_or(event);
                 self.pending_event_type = event.to_string();
             }
         }

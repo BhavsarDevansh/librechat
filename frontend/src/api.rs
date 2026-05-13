@@ -318,6 +318,7 @@ pub async fn stream_chat_request(
         .map_err(|e| ApiError::Network(format!("failed to create stream reader: {e:?}")))?;
 
     let mut parser = crate::sse::SseParser::new();
+    let mut leftover = Vec::new();
 
     loop {
         let promise = reader.read();
@@ -362,7 +363,15 @@ pub async fn stream_chat_request(
         let array = js_sys::Uint8Array::from(value);
         let mut bytes = vec![0u8; array.length() as usize];
         array.copy_to(&mut bytes);
-        let text = String::from_utf8_lossy(&bytes);
+
+        leftover.extend_from_slice(&bytes);
+        let mut split = leftover.len();
+        while split > 0 && (leftover[split - 1] & 0b1100_0000) == 0b1000_0000 {
+            split -= 1;
+        }
+        let tail = leftover.split_off(split);
+        let valid = std::mem::replace(&mut leftover, tail);
+        let text = String::from_utf8_lossy(&valid);
 
         let events = parser.feed(&text);
         for event in events {
