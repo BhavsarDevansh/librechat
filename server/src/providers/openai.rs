@@ -6,7 +6,8 @@
 //! [`tokio::sync::mpsc`] channel.
 
 use crate::providers::{
-    ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, LlmProvider, ProviderError,
+    ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, LlmProvider, ModelInfo,
+    ProviderError,
 };
 
 use async_trait::async_trait;
@@ -134,101 +135,15 @@ impl OpenAiProvider {
     }
 }
 
-/// Truncate a byte slice to `max_len` bytes, ensuring the result is valid
-/// UTF-8 by finding a char boundary. Appends "…" if truncation occurred.
-fn truncate_bytes_to_string(bytes: &[u8], max_len: usize) -> String {
-    if bytes.len() <= max_len {
-        return String::from_utf8_lossy(bytes).into_owned();
-    }
-
-    let mut end = max_len;
-    while end > 0 {
-        if bytes[end] & 0xC0 != 0x80 {
-            break;
-        }
-        end -= 1;
-    }
-    if end == 0 {
-        end = max_len;
-    }
-
-    let truncated = String::from_utf8_lossy(&bytes[..end]);
-    format!("{truncated}…")
-}
-
-/// Process all `data:` lines in a decoded SSE event string, sending parsed
-/// chunks through the channel.
-///
-/// Per the SSE specification, a `data:` field may optionally be followed by a
-/// single space before the value. Both `data:{"…"}` and `data: {"…"}` are
-/// accepted.
-///
-/// Returns `Ok(true)` if `[DONE]` was encountered, `Ok(false)` otherwise,
-/// or `Err(())` if the receiver was dropped.
-async fn process_sse_event(
-    event: &str,
-    tx: &mpsc::Sender<Result<ChatCompletionChunk, ProviderError>>,
-) -> Result<bool, ()> {
-    for line in event.lines() {
-        let line = line.trim_end();
-        if line.is_empty() {
-            continue;
-        }
-        if let Some(data) = line.strip_prefix("data:") {
-            // Per SSE spec, strip at most one leading space after "data:".
-            let data = data.strip_prefix(' ').unwrap_or(data);
-            if data == "[DONE]" {
-                return Ok(true);
-            }
-            match serde_json::from_str::<ChatCompletionChunk>(data) {
-                Ok(chunk) => {
-                    if tx.send(Ok(chunk)).await.is_err() {
-                        return Err(());
-                    }
-                }
-                Err(e) => {
-                    if tx
-                        .send(Err(ProviderError::InvalidResponse(format!(
-                            "failed to parse SSE chunk: {e}"
-                        ))))
-                        .await
-                        .is_err()
-                    {
-                        return Err(());
-                    }
-                }
-            }
-        }
-    }
-    Ok(false)
-}
-
 #[async_trait]
 impl LlmProvider for OpenAiProvider {
-    /// Send a non-streaming chat completion request.
-    ///
-    /// Builds the request body from the given [`ChatCompletionRequest`],
-    /// explicitly setting `stream: false`. Sends a `POST` to
-    /// `{base_url}/v1/chat/completions` with an `Authorization: Bearer`
-    /// header when an API key is configured.
-    ///
-    /// # Error mapping
-    ///
-    /// - HTTP 4xx/5xx → [`ProviderError::ApiError`]
-    /// - Connection refused / timeout → [`ProviderError::ConnectionFailed`]
-    /// - Malformed JSON → [`ProviderError::InvalidResponse`]
     async fn chat_completion(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, ProviderError> {
-        let mut body =
-            serde_json::to_value(&request).expect("failed to serialize ChatCompletionRequest");
-        body["stream"] = serde_json::Value::Bool(false);
-
         let url = format!("{}/v1/chat/completions", self.base_url);
 
-        let mut builder = self.client.post(&url).json(&body);
-
+        let mut builder = self.client.post(&url).json(&request);
         if let Some(ref key) = self.api_key {
             builder = builder.bearer_auth(key);
         }
@@ -252,40 +167,12 @@ impl LlmProvider for OpenAiProvider {
             });
         }
 
-        let response_text = response.text().await.map_err(|e| {
-            ProviderError::InvalidResponse(format!("failed to read response body: {e}"))
-        })?;
-
-        serde_json::from_str::<ChatCompletionResponse>(&response_text).map_err(|e| {
-            ProviderError::InvalidResponse(format!("failed to deserialize response: {e}"))
-        })
+        response
+            .json()
+            .await
+            .map_err(|e| ProviderError::InvalidResponse(e.to_string()))
     }
 
-    /// Send a streaming chat completion request via Server-Sent Events.
-    ///
-    /// Sends a `POST` to `{base_url}/v1/chat/completions` with
-    /// `"stream": true` in the request body. Reads the response as a byte
-    /// stream, parses SSE `data:` lines, and sends each parsed
-    /// [`ChatCompletionChunk`] through the returned mpsc channel.
-    ///
-    /// # SSE protocol
-    ///
-    /// - Each `data:` line contains a serialised `ChatCompletionChunk`.
-    /// - `data: [DONE]` signals end-of-stream; the channel is closed gracefully.
-    /// - Partial SSE lines that span multiple TCP chunks are buffered and
-    ///   reassembled before parsing.
-    /// - Malformed JSON sends `Err(InvalidResponse)` but does **not** terminate
-    ///   the stream.
-    ///
-    /// # Error mapping (initial request)
-    ///
-    /// - HTTP 4xx/5xx → [`ProviderError::ApiError`]
-    /// - Connection refused / timeout → [`ProviderError::ConnectionFailed`]
-    ///
-    /// # Error mapping (during streaming)
-    ///
-    /// - Bytes-stream error → [`ProviderError::ConnectionFailed`]
-    /// - Clean EOF without `[DONE]` → [`ProviderError::StreamEnded`]
     async fn chat_completion_stream(
         &self,
         request: ChatCompletionRequest,
@@ -379,8 +266,6 @@ impl LlmProvider for OpenAiProvider {
                 let remaining = String::from_utf8_lossy(&buffer);
                 let remaining = remaining.trim();
                 if !remaining.is_empty() {
-                    // Trimmed &str may yield InvalidResponse for partial JSON fragments,
-                    // but we intentionally continue to fallthrough and send StreamEnded.
                     match process_sse_event(remaining, &tx).await {
                         Ok(true) => return,
                         Ok(false) => {}
@@ -396,9 +281,125 @@ impl LlmProvider for OpenAiProvider {
         Ok(rx)
     }
 
+    /// List available models from the provider.
+    ///
+    /// Tries the OpenAI-compatible `/v1/models` endpoint first. If that
+    /// returns an empty list or fails, falls back to Ollama's native
+    /// `/api/tags` endpoint. Returns a list of [`ModelInfo`] with model
+    /// identifiers.
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+        // Try OpenAI-compatible /v1/models endpoint first.
+        let url = format!("{}/v1/models", self.base_url);
+
+        let mut builder = self.client.get(&url);
+        if let Some(ref key) = self.api_key {
+            builder = builder.bearer_auth(key);
+        }
+
+        let response = match builder.send().await {
+            Ok(r) => r,
+            Err(_e) => {
+                // Connection failed on /v1/models — try Ollama fallback.
+                return self.list_models_ollama().await;
+            }
+        };
+
+        if response.status().is_success() {
+            let body: serde_json::Value = response
+                .json()
+                .await
+                .map_err(|e| ProviderError::InvalidResponse(e.to_string()))?;
+
+            // OpenAI format: { "data": [ { "id": "model-name" }, ... ] }
+            if let Some(data) = body.get("data").and_then(|d| d.as_array()) {
+                let models: Vec<ModelInfo> = data
+                    .iter()
+                    .filter_map(|item| item.get("id").and_then(|id| id.as_str()))
+                    .map(|id| ModelInfo { id: id.to_string() })
+                    .collect();
+                if !models.is_empty() {
+                    return Ok(models);
+                }
+            }
+
+            // Some providers return a flat array of model names under "models".
+            if let Some(models_arr) = body.get("models").and_then(|m| m.as_array()) {
+                let models: Vec<ModelInfo> = models_arr
+                    .iter()
+                    .filter_map(|item| {
+                        item.as_str()
+                            .map(|s| ModelInfo { id: s.to_string() })
+                            .or_else(|| {
+                                item.get("id")
+                                    .and_then(|id| id.as_str())
+                                    .map(|s| ModelInfo { id: s.to_string() })
+                            })
+                    })
+                    .collect();
+                if !models.is_empty() {
+                    return Ok(models);
+                }
+            }
+        }
+
+        // Fallback: try Ollama's native /api/tags endpoint.
+        self.list_models_ollama().await
+    }
+
     /// Human-readable name for this provider.
     fn name(&self) -> &str {
         "OpenAI-compatible"
+    }
+}
+
+impl OpenAiProvider {
+    /// Fallback: list models via Ollama's native `/api/tags` endpoint.
+    async fn list_models_ollama(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+        let url = format!("{}/api/tags", self.base_url);
+
+        let mut builder = self.client.get(&url);
+        if let Some(ref key) = self.api_key {
+            builder = builder.bearer_auth(key);
+        }
+
+        let response = builder
+            .send()
+            .await
+            .map_err(|e| ProviderError::ConnectionFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response
+                .bytes()
+                .await
+                .map(|b| truncate_bytes_to_string(&b, MAX_ERROR_BODY_BYTES))
+                .unwrap_or_else(|e| format!("(failed to read error body: {e})"));
+            return Err(ProviderError::ApiError { status, message });
+        }
+
+        let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::InvalidResponse(e.to_string()))?;
+
+        // Ollama format: { "models": [ { "name": "llama3:latest", ... }, ... ] }
+        if let Some(models) = body.get("models").and_then(|m| m.as_array()) {
+            let model_list: Vec<ModelInfo> = models
+                .iter()
+                .filter_map(|item| {
+                    item.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|n| ModelInfo { id: n.to_string() })
+                })
+                .collect();
+            if !model_list.is_empty() {
+                return Ok(model_list);
+            }
+        }
+
+        Err(ProviderError::InvalidResponse(
+            "No models found from provider: both /v1/models and /api/tags returned empty or invalid responses".to_string(),
+        ))
     }
 }
 
@@ -415,4 +416,130 @@ fn find_event_delimiter(buffer: &[u8]) -> Option<(usize, usize)> {
         .windows(2)
         .position(|w| w == b"\n\n")
         .map(|pos| (pos, 2))
+}
+
+/// Process a single SSE event from the byte stream.
+///
+/// Returns `Ok(true)` if [DONE] was received (stream should end),
+/// `Ok(false)` if a normal chunk was processed, or `Err(())` if the
+/// receiver has been dropped.
+async fn process_sse_event(
+    event_text: &str,
+    tx: &mpsc::Sender<Result<ChatCompletionChunk, ProviderError>>,
+) -> Result<bool, ()> {
+    for line in event_text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with(':') {
+            continue;
+        }
+
+        if let Some(data) = line.strip_prefix("data:") {
+            let data = data.trim();
+            if data == "[DONE]" {
+                return Ok(true);
+            }
+            match serde_json::from_str::<ChatCompletionChunk>(data) {
+                Ok(chunk) => {
+                    if tx.send(Ok(chunk)).await.is_err() {
+                        return Err(());
+                    }
+                }
+                Err(e) => {
+                    if tx
+                        .send(Err(ProviderError::InvalidResponse(format!(
+                            "failed to parse SSE chunk: {e}"
+                        ))))
+                        .await
+                        .is_err()
+                    {
+                        return Err(());
+                    }
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+/// Truncate a byte slice to a string, limiting to `max_bytes`.
+/// Used for error response bodies that may be very large.
+/// Finds the last valid UTF-8 character boundary at or before `max_bytes`
+/// to avoid slicing in the middle of a multi-byte sequence.
+fn truncate_bytes_to_string(bytes: &[u8], max_bytes: usize) -> String {
+    let limit = if bytes.len() > max_bytes {
+        // Walk backwards from max_bytes to find a valid UTF-8 char boundary.
+        let mut end = max_bytes;
+        while end > 0 && std::str::from_utf8(&bytes[..end]).is_err() {
+            end -= 1;
+        }
+        if end == 0 { max_bytes } else { end }
+    } else {
+        bytes.len()
+    };
+    String::from_utf8_lossy(&bytes[..limit]).into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_model_constant() {
+        assert_eq!(DEFAULT_MODEL, "llama3");
+    }
+
+    #[test]
+    fn test_provider_new_trims_trailing_slash() {
+        let provider = OpenAiProvider::new(
+            "http://localhost:11434/".to_string(),
+            None,
+            "test-model".to_string(),
+        );
+        assert_eq!(provider.base_url(), "http://localhost:11434");
+    }
+
+    #[test]
+    fn test_provider_new_strips_empty_api_key() {
+        let provider = OpenAiProvider::new(
+            "http://localhost:11434".to_string(),
+            Some("".to_string()),
+            "test-model".to_string(),
+        );
+        assert!(provider.api_key().is_none());
+    }
+
+    #[test]
+    fn test_provider_new_keeps_nonempty_api_key() {
+        let provider = OpenAiProvider::new(
+            "http://localhost:11434".to_string(),
+            Some("sk-test".to_string()),
+            "test-model".to_string(),
+        );
+        assert_eq!(provider.api_key(), Some("sk-test"));
+    }
+
+    #[test]
+    fn test_find_event_delimiter_double_newline() {
+        assert_eq!(find_event_delimiter(b"hello\n\nworld"), Some((5, 2)));
+    }
+
+    #[test]
+    fn test_find_event_delimiter_crlf_crlf() {
+        assert_eq!(find_event_delimiter(b"hello\r\n\r\nworld"), Some((5, 4)));
+    }
+
+    #[test]
+    fn test_find_event_delimiter_none() {
+        assert_eq!(find_event_delimiter(b"no delimiter here"), None);
+    }
+
+    #[test]
+    fn test_truncate_bytes_to_string_short() {
+        assert_eq!(truncate_bytes_to_string(b"hello", 100), "hello");
+    }
+
+    #[test]
+    fn test_truncate_bytes_to_string_truncated() {
+        assert_eq!(truncate_bytes_to_string(b"hello world", 5), "hello");
+    }
 }

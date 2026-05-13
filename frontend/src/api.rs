@@ -1,9 +1,8 @@
-//! Frontend API client for the LibreChat non-streaming chat endpoint.
+//! Frontend API client for the LibreChat chat and models endpoints.
 //!
-//! Provides [`send_chat_request`] which posts a conversation history to the
-//! backend `POST /api/chat/completions` endpoint and returns the full
-//! [`ApiChatCompletionResponse`]. The API base URL is configurable via the
-//! `window.__LIBRECHAT_API_URL__` JavaScript property (default: current origin).
+//! Provides [`send_chat_request`] and [`fetch_models`] which communicate with
+//! the backend. The API base URL and optional auth key are read from the
+//! application state settings rather than hardcoded constants.
 
 use gloo_net::http::Request;
 use serde::{Deserialize, Serialize};
@@ -41,10 +40,6 @@ pub struct ApiChatCompletionRequest {
 }
 
 /// Non-streaming response received from the chat completions endpoint.
-///
-/// Fields `id`, `model`, and `usage` are deserialized from the server response
-/// but not yet consumed by the frontend — they are kept to maintain a
-/// complete API contract for future use.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApiChatCompletionResponse {
@@ -55,8 +50,6 @@ pub struct ApiChatCompletionResponse {
 }
 
 /// A single completion choice in a non-streaming response.
-///
-/// Fields `index` and `finish_reason` are kept for API completeness.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApiChoice {
@@ -66,8 +59,6 @@ pub struct ApiChoice {
 }
 
 /// Token usage statistics returned by the provider.
-///
-/// Kept for API completeness; not yet displayed in the UI.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApiUsage {
@@ -76,7 +67,19 @@ pub struct ApiUsage {
     pub total_tokens: u32,
 }
 
-/// Errors that can occur when calling the chat completions API.
+/// A single model returned by the `/api/models` endpoint.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApiModelInfo {
+    pub id: String,
+}
+
+/// Response from the `/api/models` endpoint.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApiModelsResponse {
+    pub models: Vec<ApiModelInfo>,
+}
+
+/// Errors that can occur when calling the API.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApiError {
     /// The network request failed (e.g. CORS, DNS, connection refused).
@@ -97,11 +100,20 @@ impl std::fmt::Display for ApiError {
     }
 }
 
+/// Resolve the full API base URL. If the user has configured a custom
+/// endpoint in settings, that is used. Otherwise falls back to the
+/// `window.__LIBRECHAT_API_URL__` JS property (empty string = same origin).
+fn resolve_api_base(custom_endpoint: &str) -> String {
+    if !custom_endpoint.is_empty() {
+        return custom_endpoint.trim_end_matches('/').to_string();
+    }
+    js_api_base_url()
+}
+
 /// Read the API base URL from the `window.__LIBRECHAT_API_URL__` JavaScript
 /// property. Returns an empty string (i.e. relative URLs) when the property
-/// is not set, which works correctly when the frontend is served by the same
-/// origin as the backend.
-fn api_base_url() -> String {
+/// is not set.
+fn js_api_base_url() -> String {
     use web_sys::window;
 
     let Some(win) = window() else {
@@ -118,16 +130,34 @@ fn api_base_url() -> String {
     value.as_string().unwrap_or_default()
 }
 
+/// Build a `RequestBuilder` with optional `Authorization: Bearer` header.
+fn builder_with_auth(method: &str, url: &str, auth_key: &str) -> gloo_net::http::RequestBuilder {
+    let builder = match method {
+        "GET" => Request::get(url),
+        "POST" => Request::post(url),
+        _ => panic!("Unsupported HTTP method: {method}"),
+    };
+
+    if !auth_key.is_empty() {
+        builder.header("Authorization", &format!("Bearer {auth_key}"))
+    } else {
+        builder
+    }
+}
+
 /// Send a non-streaming chat completion request to the backend.
 ///
 /// Constructs a `POST /api/chat/completions` request with the given messages
 /// and model, then awaits the full response. The model defaults to
-/// [`DEFAULT_MODEL`] when an empty string is supplied.
+/// [`DEFAULT_MODEL`] when an empty string is supplied. The `endpoint` and
+/// `auth_key` parameters override the default origin and add auth headers.
 pub async fn send_chat_request(
     messages: &[ApiChatMessage],
     model: &str,
+    endpoint: &str,
+    auth_key: &str,
 ) -> Result<ApiChatCompletionResponse, ApiError> {
-    let base = api_base_url();
+    let base = resolve_api_base(endpoint);
     let url = format!("{base}/api/chat/completions");
 
     let request = ApiChatCompletionRequest {
@@ -142,7 +172,7 @@ pub async fn send_chat_request(
         stream: Some(false),
     };
 
-    let response = Request::post(&url)
+    let response = builder_with_auth("POST", &url, auth_key)
         .json(&request)
         .map_err(|e| ApiError::Network(e.to_string()))?
         .send()
@@ -166,6 +196,40 @@ pub async fn send_chat_request(
         .json()
         .await
         .map_err(|e| ApiError::Parse(e.to_string()))
+}
+
+/// Fetch the list of available models from the backend.
+///
+/// Calls `GET /api/models` and returns the model identifiers. The `endpoint`
+/// and `auth_key` parameters override the default origin and add auth headers.
+pub async fn fetch_models(endpoint: &str, auth_key: &str) -> Result<Vec<ApiModelInfo>, ApiError> {
+    let base = resolve_api_base(endpoint);
+    let url = format!("{base}/api/models");
+
+    let response = builder_with_auth("GET", &url, auth_key)
+        .send()
+        .await
+        .map_err(|e| ApiError::Network(e.to_string()))?;
+
+    let status = response.status();
+
+    if !response.ok() {
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "<no body>".to_string());
+        return Err(ApiError::Http {
+            status,
+            body: body.chars().take(512).collect(),
+        });
+    }
+
+    let models_response: ApiModelsResponse = response
+        .json()
+        .await
+        .map_err(|e| ApiError::Parse(e.to_string()))?;
+
+    Ok(models_response.models)
 }
 
 #[cfg(test)]
@@ -226,4 +290,21 @@ mod tests {
         assert!(!json.contains("temperature"));
         assert!(!json.contains("max_tokens"));
     }
+
+    #[test]
+    fn test_resolve_api_base_uses_custom_endpoint() {
+        assert_eq!(
+            resolve_api_base("http://localhost:11434"),
+            "http://localhost:11434"
+        );
+    }
+
+    #[test]
+    fn test_resolve_api_base_strips_trailing_slash() {
+        assert_eq!(
+            resolve_api_base("http://localhost:11434/"),
+            "http://localhost:11434"
+        );
+    }
+
 }

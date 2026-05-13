@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use server::app;
 use server::providers::{
     ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Choice,
-    LlmProvider, MessageRole, ProviderError, Usage,
+    LlmProvider, MessageRole, ModelInfo, ProviderError, Usage,
 };
 use server::state::AppState;
 use std::sync::{Arc, Mutex};
@@ -96,6 +96,12 @@ impl LlmProvider for MockProvider {
         _request: ChatCompletionRequest,
     ) -> Result<mpsc::Receiver<Result<ChatCompletionChunk, ProviderError>>, ProviderError> {
         Err(ProviderError::StreamingNotSupported)
+    }
+
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(vec![ModelInfo {
+            id: "test-model".to_string(),
+        }])
     }
 
     fn name(&self) -> &str {
