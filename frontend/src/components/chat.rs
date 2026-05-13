@@ -140,9 +140,7 @@ pub fn ChatView() -> impl IntoView {
     let (loading, set_loading) = signal(false);
     let next_id = RwSignal::new(0usize);
 
-    let active_messages = move || {
-        state.active_messages()
-    };
+    let active_messages = move || state.active_messages();
 
     let on_send = move |text: String| {
         if loading.get() {
@@ -218,44 +216,76 @@ pub fn ChatView() -> impl IntoView {
         let endpoint = settings.api_endpoint.clone();
         let auth_key = settings.auth_key.clone();
 
-        leptos::task::spawn_local(async move {
-            let result = api::send_chat_request(&api_messages, &model, &endpoint, &auth_key).await;
-            set_loading.set(false);
+        let assistant_id = next_id.get();
+        next_id.update(|id| *id += 1);
 
-            let assistant_id = next_id.get();
-            next_id.update(|id| *id += 1);
-
-            let assistant_msg = match result {
-                Ok(response) => {
-                    if let Some(choice) = response.choices.first() {
-                        ChatMessage {
-                            id: assistant_id,
-                            role: MessageRole::Assistant,
-                            content: choice.message.content.clone(),
-                            is_error: false,
-                        }
-                    } else {
-                        ChatMessage {
-                            id: assistant_id,
-                            role: MessageRole::Assistant,
-                            content: "(empty response from model)".to_string(),
-                            is_error: true,
-                        }
-                    }
-                }
-                Err(error) => ChatMessage {
+        // Add empty assistant placeholder so the UI shows a bubble immediately.
+        state.threads.update(|threads| {
+            if let Some(thread) = threads.iter_mut().find(|t| t.id == active_id) {
+                thread.messages.push(ChatMessage {
                     id: assistant_id,
                     role: MessageRole::Assistant,
-                    content: format!("{error}"),
-                    is_error: true,
-                },
-            };
+                    content: String::new(),
+                    is_error: false,
+                });
+            }
+        });
 
-            state.threads.update(|threads| {
-                if let Some(thread) = threads.iter_mut().find(|t| t.id == active_id) {
-                    thread.messages.push(assistant_msg);
+        set_loading.set(true);
+
+        leptos::task::spawn_local(async move {
+            let result =
+                api::stream_chat_request(&api_messages, &model, &endpoint, &auth_key, |chunk| {
+                    if let Some(content) =
+                        chunk.choices.first().and_then(|c| c.delta.content.as_ref())
+                    {
+                        state.threads.update(|threads| {
+                            if let Some(thread) = threads.iter_mut().find(|t| t.id == active_id) {
+                                if let Some(msg) =
+                                    thread.messages.iter_mut().find(|m| m.id == assistant_id)
+                                {
+                                    msg.content.push_str(content);
+                                }
+                            }
+                        });
+                    }
+                })
+                .await;
+
+            set_loading.set(false);
+
+            if let Err(error) = result {
+                state.threads.update(|threads| {
+                    if let Some(thread) = threads.iter_mut().find(|t| t.id == active_id) {
+                        if let Some(msg) = thread.messages.iter_mut().find(|m| m.id == assistant_id)
+                        {
+                            msg.content = format!("{error}");
+                            msg.is_error = true;
+                        }
+                    }
+                });
+            } else {
+                let is_empty = state.threads.with(|threads| {
+                    threads
+                        .iter()
+                        .find(|t| t.id == active_id)
+                        .and_then(|thread| thread.messages.iter().find(|m| m.id == assistant_id))
+                        .map(|msg| msg.content.trim().is_empty())
+                        .unwrap_or(true)
+                });
+                if is_empty {
+                    state.threads.update(|threads| {
+                        if let Some(thread) = threads.iter_mut().find(|t| t.id == active_id) {
+                            if let Some(msg) =
+                                thread.messages.iter_mut().find(|m| m.id == assistant_id)
+                            {
+                                msg.content = "(empty response from model)".to_string();
+                                msg.is_error = true;
+                            }
+                        }
+                    });
                 }
-            });
+            }
         });
     };
 

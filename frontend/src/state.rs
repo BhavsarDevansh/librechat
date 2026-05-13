@@ -111,9 +111,8 @@ impl AppState {
     #[allow(dead_code)]
     pub fn active_thread(&self) -> Option<ChatThread> {
         let active_id = self.active_thread_id.get()?;
-        self.threads.with(|threads| {
-            threads.iter().find(|t| t.id == active_id).cloned()
-        })
+        self.threads
+            .with(|threads| threads.iter().find(|t| t.id == active_id).cloned())
     }
 
     /// Get the active thread's messages directly, avoiding cloning the full ChatThread.

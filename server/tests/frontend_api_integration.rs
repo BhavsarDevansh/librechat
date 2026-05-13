@@ -212,8 +212,8 @@ fn test_chat_view_calls_send_chat_request() {
     let body = extract_function_body(&source, "ChatView")
         .expect("ChatView function must exist in chat.rs");
     assert!(
-        body.contains("send_chat_request(") || body.contains("api::send_chat_request("),
-        "ChatView body must call send_chat_request() from the api module"
+        body.contains("stream_chat_request(") || body.contains("api::stream_chat_request("),
+        "ChatView body must call stream_chat_request() from the api module"
     );
 }
 

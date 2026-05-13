@@ -472,7 +472,11 @@ fn truncate_bytes_to_string(bytes: &[u8], max_bytes: usize) -> String {
         while end > 0 && std::str::from_utf8(&bytes[..end]).is_err() {
             end -= 1;
         }
-        if end == 0 { max_bytes } else { end }
+        if end == 0 {
+            max_bytes
+        } else {
+            end
+        }
     } else {
         bytes.len()
     };
