@@ -17,6 +17,7 @@ reqwest = { workspace = true, features = ["json", "stream"] }
 tower-http = { workspace = true }
 async-trait = { workspace = true }
 futures-util = { workspace = true }
+sqlx = { workspace = true }
 
 [dev-dependencies]
 tower = { workspace = true }
