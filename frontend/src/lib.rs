@@ -1,5 +1,6 @@
 mod api;
 mod components;
+mod sse;
 mod state;
 
 use components::chat::ChatView;

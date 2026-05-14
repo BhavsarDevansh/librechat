@@ -73,6 +73,34 @@ pub struct ApiModelInfo {
     pub id: String,
 }
 
+/// A single chunk in a streaming response (SSE format).
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub struct ApiChatCompletionChunk {
+    pub id: String,
+    pub model: String,
+    pub choices: Vec<ApiChunkChoice>,
+}
+
+/// A single choice within a streaming chunk.
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub struct ApiChunkChoice {
+    pub index: u32,
+    pub delta: ApiChunkDelta,
+    pub finish_reason: Option<String>,
+}
+
+/// Delta content within a streaming chunk choice.
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub struct ApiChunkDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<ApiMessageRole>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+}
+
 /// Response from the `/api/models` endpoint.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApiModelsResponse {
@@ -151,6 +179,7 @@ fn builder_with_auth(method: &str, url: &str, auth_key: &str) -> gloo_net::http:
 /// and model, then awaits the full response. The model defaults to
 /// [`DEFAULT_MODEL`] when an empty string is supplied. The `endpoint` and
 /// `auth_key` parameters override the default origin and add auth headers.
+#[allow(dead_code)]
 pub async fn send_chat_request(
     messages: &[ApiChatMessage],
     model: &str,
@@ -232,6 +261,163 @@ pub async fn fetch_models(endpoint: &str, auth_key: &str) -> Result<Vec<ApiModel
     Ok(models_response.models)
 }
 
+fn is_char_start(b: u8) -> bool {
+    // ASCII or multi-byte leader (not a continuation byte)
+    (b & 0b1100_0000) != 0b1000_0000
+}
+
+/// Send a streaming chat completion request to the backend.
+///
+/// Constructs a `POST /api/chat/completions/stream` request with the given
+/// messages and model, then reads the SSE response body chunk-by-chunk.
+/// For each parsed [`ApiChatCompletionChunk`], the `on_chunk` callback is
+/// invoked. The stream terminates when `data: [DONE]` is received or an
+/// error occurs.
+pub async fn stream_chat_request(
+    messages: &[ApiChatMessage],
+    model: &str,
+    endpoint: &str,
+    auth_key: &str,
+    mut on_chunk: impl FnMut(ApiChatCompletionChunk),
+) -> Result<(), ApiError> {
+    let base = resolve_api_base(endpoint);
+    let url = format!("{base}/api/chat/completions/stream");
+
+    let request = ApiChatCompletionRequest {
+        model: if model.is_empty() {
+            DEFAULT_MODEL.to_string()
+        } else {
+            model.to_string()
+        },
+        messages: messages.to_vec(),
+        temperature: None,
+        max_tokens: None,
+        stream: Some(true),
+    };
+
+    let response = builder_with_auth("POST", &url, auth_key)
+        .json(&request)
+        .map_err(|e| ApiError::Network(e.to_string()))?
+        .send()
+        .await
+        .map_err(|e| ApiError::Network(e.to_string()))?;
+
+    let status = response.status();
+
+    if !response.ok() {
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "<no body>".to_string());
+        return Err(ApiError::Http {
+            status,
+            body: body.chars().take(512).collect(),
+        });
+    }
+
+    let body = response
+        .body()
+        .ok_or_else(|| ApiError::Network("response body missing".to_string()))?;
+
+    let reader = web_sys::ReadableStreamDefaultReader::new(&body)
+        .map_err(|e| ApiError::Network(format!("failed to create stream reader: {e:?}")))?;
+
+    let mut parser = crate::sse::SseParser::new();
+    let mut leftover = Vec::new();
+
+    loop {
+        let promise = reader.read();
+        let result = wasm_bindgen_futures::JsFuture::from(promise)
+            .await
+            .map_err(|e| ApiError::Network(format!("stream read failed: {e:?}")))?;
+
+        let done = js_sys::Reflect::get(&result, &"done".into())
+            .map_err(|e| ApiError::Parse(format!("invalid stream result: {e:?}")))?
+            .as_bool()
+            .unwrap_or(false);
+
+        if done {
+            if let Some(event) = parser.finalize() {
+                if event.data == "[DONE]" {
+                    return Ok(());
+                }
+                if event.event_type == "error" {
+                    let msg = serde_json::from_str::<serde_json::Value>(&event.data)
+                        .ok()
+                        .and_then(|v| v.get("error")?.get("message")?.as_str().map(String::from))
+                        .unwrap_or_else(|| event.data.clone());
+                    return Err(ApiError::Http {
+                        status: 500,
+                        body: msg,
+                    });
+                }
+                let chunk: ApiChatCompletionChunk = serde_json::from_str(&event.data)
+                    .map_err(|e| ApiError::Parse(format!("invalid chunk JSON: {e}")))?;
+                on_chunk(chunk);
+            }
+            return Ok(());
+        }
+
+        let value = js_sys::Reflect::get(&result, &"value".into())
+            .map_err(|e| ApiError::Parse(format!("invalid stream value: {e:?}")))?;
+
+        if value.is_undefined() || value.is_null() {
+            continue;
+        }
+
+        let array = js_sys::Uint8Array::from(value);
+        let mut bytes = vec![0u8; array.length() as usize];
+        array.copy_to(&mut bytes);
+
+        leftover.extend_from_slice(&bytes);
+        // Find the last valid UTF-8 char boundary
+        let mut split = leftover.len();
+        while split > 0 && !is_char_start(leftover[split - 1]) {
+            split -= 1;
+        }
+        // If we stopped at a multi-byte leader, check if it's complete
+        if split > 0 {
+            let leader = leftover[split - 1];
+            let expected_len = if leader & 0b1111_0000 == 0b1111_0000 {
+                4
+            } else if leader & 0b1110_0000 == 0b1110_0000 {
+                3
+            } else if leader & 0b1100_0000 == 0b1100_0000 {
+                2
+            } else {
+                1
+            };
+            let available = leftover.len() - (split - 1);
+            if available < expected_len {
+                split -= 1; // Defer the incomplete sequence
+            }
+        }
+        let tail = leftover.split_off(split);
+        let valid = std::mem::replace(&mut leftover, tail);
+        let text = String::from_utf8_lossy(&valid);
+
+        let events = parser.feed(&text);
+        for event in events {
+            if event.data == "[DONE]" {
+                return Ok(());
+            }
+            if event.event_type == "error" {
+                let msg = serde_json::from_str::<serde_json::Value>(&event.data)
+                    .ok()
+                    .and_then(|v| v.get("error")?.get("message")?.as_str().map(String::from))
+                    .unwrap_or_else(|| event.data.clone());
+                return Err(ApiError::Http {
+                    status: 500,
+                    body: msg,
+                });
+            }
+            let chunk: ApiChatCompletionChunk = serde_json::from_str(&event.data)
+                .map_err(|e| ApiError::Parse(format!("invalid chunk JSON: {e}")))?;
+            on_chunk(chunk);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,4 +493,41 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_chat_completion_chunk_deserialisation() {
+        let json = r#"{
+            "id": "chatcmpl-123",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": { "role": "assistant", "content": "Hello" },
+                    "finish_reason": null
+                }
+            ]
+        }"#;
+        let chunk: ApiChatCompletionChunk = serde_json::from_str(json).expect("deserialise chunk");
+        assert_eq!(chunk.id, "chatcmpl-123");
+        assert_eq!(chunk.model, "gpt-4");
+        assert_eq!(chunk.choices.len(), 1);
+        assert_eq!(chunk.choices[0].index, 0);
+        assert_eq!(chunk.choices[0].delta.role, Some(ApiMessageRole::Assistant));
+        assert_eq!(chunk.choices[0].delta.content, Some("Hello".to_string()));
+    }
+
+    #[test]
+    fn test_stream_request_payload_serialisation() {
+        let req = ApiChatCompletionRequest {
+            model: "test-model".to_string(),
+            messages: vec![ApiChatMessage {
+                role: ApiMessageRole::User,
+                content: "hello".to_string(),
+            }],
+            temperature: None,
+            max_tokens: None,
+            stream: Some(true),
+        };
+        let json = serde_json::to_string(&req).expect("serialise");
+        assert!(json.contains("\"stream\":true"));
+    }
 }
