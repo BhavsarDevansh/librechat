@@ -8,7 +8,7 @@
 
 -- Chat threads
 CREATE TABLE IF NOT EXISTS conversations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     title TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS conversations (
 
 -- Messages belonging to a conversation
 CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     conversation_id INTEGER NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -44,9 +44,11 @@ CREATE TABLE IF NOT EXISTS model_preferences (
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
 
 -- Trigger to auto-update updated_at on conversation changes
+-- Trigger to auto-update updated_at on conversation changes
 CREATE TRIGGER IF NOT EXISTS update_conversations_timestamp
     AFTER UPDATE ON conversations
     FOR EACH ROW
+    WHEN OLD.updated_at IS NEW.updated_at
 BEGIN
     UPDATE conversations SET updated_at = CURRENT_TIMESTAMP
     WHERE id = NEW.id;

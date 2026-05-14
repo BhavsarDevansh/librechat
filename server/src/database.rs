@@ -57,7 +57,7 @@ pub async fn init_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(1800);
 
-    let opts = SqliteConnectOptions::from_str(database_url)?.create_if_missing(true);
+    let opts = SqliteConnectOptions::from_str(database_url)?.create_if_missing(true).foreign_keys(true);
 
     SqlitePoolOptions::new()
         .max_connections(max_connections)
