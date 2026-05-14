@@ -16,6 +16,7 @@ first building block of Phase 2; future updates will add a full chat-history
 UI and richer settings screens on top of this foundation.
 
 ### Who benefits?
+
 - **End users** who want their chat history to persist across server restarts.
 - **Self-hosters** running LibreChat on a Raspberry Pi or low-power device,
   because SQLite is extremely lightweight and requires no separate database
@@ -71,26 +72,31 @@ cargo run -p server
 
 ## FAQ / Troubleshooting
 
-### Q: The server fails to start with a "database initialisation" error.  
+### Q: The server fails to start with a "database initialisation" error.
+
 **A:** Make sure the directory where the database file lives is writable.  If
 you set a custom `LIBRECHAT_DATABASE_URL`, check that the parent directory
 exists.  The default path `librechat.db` requires write permission in the
 folder where you run the server.
 
-### Q: Can I use PostgreSQL or MySQL instead?  
+### Q: Can I use PostgreSQL or MySQL instead?
+
 **A:** Not with this issue.  The foundation is intentionally SQLite-only to
 keep the project small and portable.  Remote database support may be explored
 in a later Phase.
 
-### Q: Where is my data?  
+### Q: Where is my data?
+
 **A:** By default, in a file called `librechat.db` in the same folder you
 start the server from.  You can open it with any SQLite viewer or the
 `sqlite3` command-line tool.
 
-### Q: Do I need to run migration scripts manually?  
+### Q: Do I need to run migration scripts manually?
+
 **A:** No.  Migrations run automatically every time the server starts.
 
-### Q: Will the database work on a Raspberry Pi?  
+### Q: Will the database work on a Raspberry Pi?
+
 **A:** Yes.  SQLite is one of the most resource-efficient databases
 available and is widely used on embedded devices.
 

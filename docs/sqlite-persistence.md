@@ -9,6 +9,7 @@
 ## Architecture & Design
 
 ### Goal
+
 Introduce a lightweight, local-first persistence layer for LibreChat using
 SQLite and SQLx.  This is the **foundation** for Phase 2; later issues will
 add repository functions, chat-history APIs, and UI integration.
@@ -62,17 +63,21 @@ pub async fn table_exists(pool: &SqlitePool, table_name: &str) -> Result<bool, s
 ```
 
 #### `default_database_url`
+
 Reads `LIBRECHAT_DATABASE_URL`; falls back to `sqlite:librechat.db`.
 
 #### `init_pool`
+
 Builds a [`SqlitePool`] with `create_if_missing(true)` so the database file
 is created automatically when it does not yet exist.
 
 #### `run_migrations`
+
 Executes all `.sql` files in `server/migrations/` in lexicographic order.
 Migration state is tracked in a `_sqlx_migrations` table managed by SQLx.
 
 #### `table_exists`
+
 Compile-time checked query (`sqlx::query!`) returning `true` when the
 named table is present in `sqlite_master`.
 

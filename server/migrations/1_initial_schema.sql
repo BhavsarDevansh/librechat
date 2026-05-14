@@ -48,5 +48,6 @@ CREATE TRIGGER IF NOT EXISTS update_conversations_timestamp
     AFTER UPDATE ON conversations
     FOR EACH ROW
 BEGIN
-    UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    UPDATE conversations SET updated_at = CURRENT_TIMESTAMP
+    WHERE id = NEW.id;
 END;
