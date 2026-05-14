@@ -261,6 +261,11 @@ pub async fn fetch_models(endpoint: &str, auth_key: &str) -> Result<Vec<ApiModel
     Ok(models_response.models)
 }
 
+fn is_char_start(b: u8) -> bool {
+    // ASCII or multi-byte leader (not a continuation byte)
+    (b & 0b1100_0000) != 0b1000_0000
+}
+
 /// Send a streaming chat completion request to the backend.
 ///
 /// Constructs a `POST /api/chat/completions/stream` request with the given
@@ -365,9 +370,27 @@ pub async fn stream_chat_request(
         array.copy_to(&mut bytes);
 
         leftover.extend_from_slice(&bytes);
+        // Find the last valid UTF-8 char boundary
         let mut split = leftover.len();
-        while split > 0 && (leftover[split - 1] & 0b1100_0000) == 0b1000_0000 {
+        while split > 0 && !is_char_start(leftover[split - 1]) {
             split -= 1;
+        }
+        // If we stopped at a multi-byte leader, check if it's complete
+        if split > 0 {
+            let leader = leftover[split - 1];
+            let expected_len = if leader & 0b1111_0000 == 0b1111_0000 {
+                4
+            } else if leader & 0b1110_0000 == 0b1110_0000 {
+                3
+            } else if leader & 0b1100_0000 == 0b1100_0000 {
+                2
+            } else {
+                1
+            };
+            let available = leftover.len() - (split - 1);
+            if available < expected_len {
+                split -= 1; // Defer the incomplete sequence
+            }
         }
         let tail = leftover.split_off(split);
         let valid = std::mem::replace(&mut leftover, tail);

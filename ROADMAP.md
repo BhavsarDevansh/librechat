@@ -3,12 +3,12 @@
 ## 🚩 Phase 1: Foundation & Basic Connectivity
 *The goal of this phase is to establish a working "Hello World" of the application: a user can send a prompt and receive a response from a local LLM.*
 
-- [ ] **Project Scaffolding**: Establish the Cargo workspace, dependency management, and build pipeline for the native Axum server and Leptos CSR WASM frontend.
-- [ ] **Core Web Server**: Implement a minimal Axum web server with health check endpoint, CORS, and static file serving for the WASM frontend.
-- [ ] **LLM Provider Trait & OpenAI-Compatible Client**: Define a generic `LlmProvider` trait and implement a concrete client targeting the OpenAI Chat Completions API (`/v1/chat/completions`), which is compatible with both Ollama and OpenAI.
-- [ ] **Chat Completions API Route**: Add an Axum route that accepts chat messages from the frontend, forwards them to the provider, and returns the response.
-- [ ] **Basic Chat UI**: Build a Leptos CSR chat interface with a message list, text input, and send button that communicates with the backend.
-- [ ] **Live Streaming**: Enable real-time SSE streaming of LLM responses from the Axum server to the Leptos frontend so users see tokens as they arrive.
+- [x] **Project Scaffolding**: Establish the Cargo workspace, dependency management, and build pipeline for the native Axum server and Leptos CSR WASM frontend.
+- [x] **Core Web Server**: Implement a minimal Axum web server with health check endpoint, CORS, and static file serving for the WASM frontend.
+- [x] **LLM Provider Trait & OpenAI-Compatible Client**: Define a generic `LlmProvider` trait and implement a concrete client targeting the OpenAI Chat Completions API (`/v1/chat/completions`), which is compatible with both Ollama and OpenAI.
+- [x] **Chat Completions API Route**: Add an Axum route that accepts chat messages from the frontend, forwards them to the provider, and returns the response.
+- [x] **Basic Chat UI**: Build a Leptos CSR chat interface with a message list, text input, and send button that communicates with the backend.
+- [x] **Live Streaming**: Enable real-time SSE streaming of LLM responses from the Axum server to the Leptos frontend so users see tokens as they arrive.
 
 ## 🚩 Phase 2: State & Persistence
 *The goal of this phase is to transition from a stateless demo to a usable tool that remembers who the user is and what they've talked about.*
