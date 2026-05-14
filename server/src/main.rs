@@ -1,7 +1,8 @@
 //! LibreChat server binary — starts the Axum HTTP server.
 //!
 //! Configures structured logging via `tracing-subscriber`, resolves the listen
-//! port from `LIBRECHAT_PORT` (default `3000`), and serves the application.
+//! port from `LIBRECHAT_PORT` (default `3000`), initialises the SQLite
+//! persistence layer, and serves the application.
 
 use server::{app, resolve_port, state::AppState};
 use tracing_subscriber::EnvFilter;
@@ -23,7 +24,20 @@ async fn main() {
 
     tracing::info!("Listening on {addr}");
 
-    axum::serve(listener, app(AppState::new()))
+    let init_timeout = std::time::Duration::from_secs(30);
+    let state = match tokio::time::timeout(init_timeout, AppState::init()).await {
+        Ok(Ok(state)) => state,
+        Ok(Err(e)) => {
+            tracing::error!("Database initialisation failed: {e}");
+            std::process::exit(1);
+        }
+        Err(_) => {
+            tracing::error!("Database initialisation timed out after {init_timeout:?}");
+            std::process::exit(1);
+        }
+    };
+
+    axum::serve(listener, app(state))
         .await
         .expect("server error");
 }

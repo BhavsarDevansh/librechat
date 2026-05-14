@@ -151,6 +151,7 @@ fn test_app(provider: Arc<dyn LlmProvider>) -> (axum::Router, TempDir) {
     .expect("write index.html");
 
     let state = AppState {
+        db_pool: None,
         provider,
         static_dir: temp_dir.path().to_path_buf(),
     };
