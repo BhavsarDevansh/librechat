@@ -22,7 +22,8 @@ sqlx = { workspace = true }
 [dev-dependencies]
 tower = { workspace = true }
 http-body-util = { workspace = true }
-http = "1"
-toml = "0.8"
-regex = "1"
-tempfile = "3"
+http = "1.4.0"
+toml = "0.8.23"
+regex = "1.12.3"
+tempfile = "3.27.0"
+serial_test = "3.2.0"

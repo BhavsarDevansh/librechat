@@ -40,8 +40,32 @@ pub fn default_database_url() -> String {
 /// The pool is cheap to clone and intended to be stored in [`AppState`].
 /// The database file is created automatically if it does not already exist.
 pub async fn init_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
+    let max_connections: u32 = std::env::var("LIBRECHAT_DB_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+    let connect_timeout_secs: u64 = std::env::var("LIBRECHAT_DB_CONNECT_TIMEOUT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let idle_timeout_secs: u64 = std::env::var("LIBRECHAT_DB_IDLE_TIMEOUT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(600);
+    let max_lifetime_secs: u64 = std::env::var("LIBRECHAT_DB_MAX_LIFETIME")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1800);
+
     let opts = SqliteConnectOptions::from_str(database_url)?.create_if_missing(true);
-    SqlitePoolOptions::new().connect_with(opts).await
+
+    SqlitePoolOptions::new()
+        .max_connections(max_connections)
+        .acquire_timeout(std::time::Duration::from_secs(connect_timeout_secs))
+        .idle_timeout(Some(std::time::Duration::from_secs(idle_timeout_secs)))
+        .max_lifetime(Some(std::time::Duration::from_secs(max_lifetime_secs)))
+        .connect_with(opts)
+        .await
 }
 
 /// Run embedded SQLx migrations against the provided pool.

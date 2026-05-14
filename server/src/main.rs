@@ -24,10 +24,18 @@ async fn main() {
 
     tracing::info!("Listening on {addr}");
 
-    let state = AppState::init().await.unwrap_or_else(|e| {
-        tracing::error!("Database initialisation failed: {e}");
-        std::process::exit(1);
-    });
+    let init_timeout = std::time::Duration::from_secs(30);
+    let state = match tokio::time::timeout(init_timeout, AppState::init()).await {
+        Ok(Ok(state)) => state,
+        Ok(Err(e)) => {
+            tracing::error!("Database initialisation failed: {e}");
+            std::process::exit(1);
+        }
+        Err(_) => {
+            tracing::error!("Database initialisation timed out after {init_timeout:?}");
+            std::process::exit(1);
+        }
+    };
 
     axum::serve(listener, app(state))
         .await

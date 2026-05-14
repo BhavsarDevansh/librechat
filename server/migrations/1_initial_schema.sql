@@ -39,3 +39,14 @@ CREATE TABLE IF NOT EXISTS model_preferences (
     temperature REAL,
     max_tokens INTEGER
 );
+
+-- Index for efficient message lookups by conversation
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+
+-- Trigger to auto-update updated_at on conversation changes
+CREATE TRIGGER IF NOT EXISTS update_conversations_timestamp
+    AFTER UPDATE ON conversations
+    FOR EACH ROW
+BEGIN
+    UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;

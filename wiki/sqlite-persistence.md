@@ -98,7 +98,7 @@ available and is widely used on embedded devices.
 
 ## Related Resources
 
-- **Technical docs:** [`docs/sqlite-persistence.md`](docs/sqlite-persistence.md)
+- **Technical docs:** [`docs/sqlite-persistence.md`](../docs/sqlite-persistence.md)
 - **SQLx compile-time query docs:** https://docs.rs/sqlx/latest/sqlx/macro.query.html
 - **SQLite syntax:** https://www.sqlite.org/lang.html
 - **Next planned feature:** Chat history UI (issue coming in Phase 2)

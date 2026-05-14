@@ -1,12 +1,6 @@
 //! Integration tests for the SQLite persistence foundation (Issue #27).
 
 use server::database::{default_database_url, init_pool, run_migrations, table_exists};
-use std::sync::Mutex;
-
-/// Mutex serialising tests that mutate the `LIBRECHAT_DATABASE_URL` environment
-/// variable. Cargo runs tests in parallel, so unsynchronised `set_var` /
-/// `remove_var` calls would cause data races.
-static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 // ---- Pool initialisation ----
 
@@ -47,8 +41,9 @@ async fn test_migrations_run_on_startup() {
 // ---- Environment variable override ----
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_database_url_env_var_override() {
-    let _lock = ENV_LOCK.lock().expect("env lock");
+    // serial_test::serial guarantees exclusive access to env var mutations.
 
     let temp = tempfile::tempdir().expect("create temp dir");
     let db_path = temp.path().join("env_test.db");
@@ -56,7 +51,7 @@ async fn test_database_url_env_var_override() {
 
     let env_key = "LIBRECHAT_DATABASE_URL";
     let original = std::env::var(env_key).ok();
-    // Safety: guarded by ENV_LOCK to serialise parallel test access.
+    // Safety: guarded by #[serial_test::serial] to serialise parallel test access.
     unsafe {
         std::env::set_var(env_key, &url);
     }

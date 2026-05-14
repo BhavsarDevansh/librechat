@@ -15,7 +15,7 @@ add repository functions, chat-history APIs, and UI integration.
 
 ### Data Flow
 
-```
+```text
 ┌─────────────┐     ┌──────────────┐     ┌────────────────┐
 │   Binary    │────>│  AppState    │────>│  SqlitePool    │
 │  (main.rs)  │     │  (state.rs)  │     │ (database.rs)  │
