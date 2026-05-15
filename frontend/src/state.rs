@@ -65,6 +65,8 @@ pub struct AppState {
     pub history_error: RwSignal<Option<String>>,
     /// ID of the thread currently being persisted (deduplication guard).
     pub currently_persisting: RwSignal<Option<ThreadId>>,
+    /// Thread waiting for a persist after the current one completes.
+    pub pending_persist: RwSignal<Option<ThreadId>>,
 }
 
 impl AppState {
@@ -85,6 +87,7 @@ impl AppState {
             models_request_id: RwSignal::new(0),
             history_error: RwSignal::new(None),
             currently_persisting: RwSignal::new(None),
+            pending_persist: RwSignal::new(None),
         };
         provide_context(state);
         state.load_conversations();
@@ -153,7 +156,7 @@ impl AppState {
             thread.backend_id.map(|bid| (bid, thread.messages.len()))
         });
 
-        if let Some((bid, msg_count)) = needs_load {
+        if let Some((bid, _msg_count)) = needs_load {
             let settings = self.settings.get();
             let endpoint = settings.api_endpoint.clone();
             let auth_key = settings.auth_key.clone();
@@ -162,7 +165,7 @@ impl AppState {
                 match history::fetch_conversation(&endpoint, &auth_key, bid).await {
                     Ok(detail) => {
                         let mut next_id = state.next_message_id.get();
-                        let messages: Vec<ChatMessage> = detail
+                        let fetched: Vec<ChatMessage> = detail
                             .messages
                             .into_iter()
                             .map(|m| {
@@ -179,13 +182,19 @@ impl AppState {
                                 }
                             })
                             .collect();
-                        state.next_message_id.set(next_id);
                         state.threads.update(|threads| {
                             if let Some(t) = threads.iter_mut().find(|t| t.id == thread_id) {
-                                t.messages = messages;
-                                t.persisted_count = msg_count;
+                                let tail = t
+                                    .messages
+                                    .split_off(t.persisted_count.min(t.messages.len()));
+                                t.messages = fetched;
+                                let tail_len = tail.len();
+                                t.messages.extend(tail);
+                                t.persisted_count = t.messages.len() - tail_len;
                             }
                         });
+                        let final_next_id = state.next_message_id.get().max(next_id);
+                        state.next_message_id.set(final_next_id);
                         state.history_error.set(None);
                     }
                     Err(err) => {
@@ -340,6 +349,7 @@ impl AppState {
     /// Persist messages for a specific thread that have not yet been saved.
     pub fn persist_thread(&self, thread_id: ThreadId) {
         if self.currently_persisting.get() == Some(thread_id) {
+            self.pending_persist.set(Some(thread_id));
             return;
         }
         self.currently_persisting.set(Some(thread_id));
@@ -399,6 +409,10 @@ impl AppState {
                 }
             }
             state.currently_persisting.set(None);
+            if state.pending_persist.get() == Some(thread_id) {
+                state.pending_persist.set(None);
+                state.persist_thread(thread_id);
+            }
         });
     }
 

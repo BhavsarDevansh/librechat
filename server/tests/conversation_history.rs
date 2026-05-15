@@ -120,8 +120,8 @@ async fn test_fetch_conversation_with_messages() {
     // Append messages
     let msg_payload = serde_json::json!({
         "messages": [
-            { "role": "user", "content": "Hello", "sequence": 0 },
-            { "role": "assistant", "content": "Hi there", "sequence": 1 }
+            { "role": "user", "content": "Hello", "sequence": 0, "is_error": true },
+            { "role": "assistant", "content": "Hi there", "sequence": 1, "is_error": false }
         ]
     });
     let msg_request = Request::builder()
@@ -149,8 +149,10 @@ async fn test_fetch_conversation_with_messages() {
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0]["role"], "user");
     assert_eq!(messages[0]["content"], "Hello");
+    assert_eq!(messages[0]["is_error"], true);
     assert_eq!(messages[1]["role"], "assistant");
     assert_eq!(messages[1]["content"], "Hi there");
+    assert_eq!(messages[1]["is_error"], false);
 }
 
 // ---- PATCH /api/conversations/{id} ----

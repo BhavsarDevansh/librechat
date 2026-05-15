@@ -24,6 +24,7 @@ Chat history is stored in SQLite via the existing SQLx pool. The feature spans t
 Returns conversation summaries ordered by `updated_at DESC`.
 
 **Response `200 OK`**
+
 ```json
 [
   {
@@ -42,6 +43,7 @@ Returns conversation summaries ordered by `updated_at DESC`.
 Creates a new conversation.
 
 **Request**
+
 ```json
 {
   "title": "New Chat",
@@ -51,6 +53,7 @@ Creates a new conversation.
 ```
 
 **Response `200 OK`**
+
 ```json
 {
   "id": 1,
@@ -67,6 +70,7 @@ Creates a new conversation.
 Fetches a single conversation with ordered messages.
 
 **Response `200 OK`**
+
 ```json
 {
   "id": 1,
@@ -88,6 +92,7 @@ Fetches a single conversation with ordered messages.
 Updates metadata (any field optional).
 
 **Request**
+
 ```json
 { "title": "Renamed Chat" }
 ```
@@ -101,6 +106,7 @@ Updates metadata (any field optional).
 Appends one or more messages.
 
 **Request**
+
 ```json
 {
   "messages": [
@@ -109,7 +115,13 @@ Appends one or more messages.
 }
 ```
 
-**Response `200 OK`** — returns `{ "appended": N }` indicating how many messages were stored.
+**Response `200 OK`** — returns the stored messages as a JSON array.
+
+```json
+[
+  { "id": 1, "role": "user", "content": "Hello", "sequence": 0, "is_error": false, "created_at": "..." }
+]
+```
 
 **Response `404 Not Found`** — conversation does not exist.
 

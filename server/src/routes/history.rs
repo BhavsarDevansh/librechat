@@ -360,6 +360,37 @@ pub async fn append_messages_handler(
             )
             .into_response();
         }
+        if !matches!(m.role.as_str(), "user" | "assistant" | "system") {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Invalid role '{}'. Allowed values: user, assistant, system",
+                    m.role
+                ),
+            )
+            .into_response();
+        }
+    }
+
+    let mut prev_sequence: Option<i64> = None;
+    for m in &payload.messages {
+        if m.sequence < 0 {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Message sequence must be non-negative".to_string(),
+            )
+            .into_response();
+        }
+        if let Some(prev) = prev_sequence {
+            if m.sequence <= prev {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    "Message sequences must be strictly increasing".to_string(),
+                )
+                .into_response();
+            }
+        }
+        prev_sequence = Some(m.sequence);
     }
 
     let msgs: Vec<(String, String, i64, bool)> = payload
@@ -375,11 +406,25 @@ pub async fn append_messages_handler(
                 message_count = msgs.len(),
                 "appended messages"
             );
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({ "appended": msgs.len() })),
-            )
-                .into_response()
+            match get_messages(pool, id).await {
+                Ok(messages) => {
+                    let responses: Vec<MessageResponse> =
+                        messages.into_iter().map(Into::into).collect();
+                    (StatusCode::OK, Json(responses)).into_response()
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        conversation_id = id,
+                        "failed to fetch messages after insert"
+                    );
+                    error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to fetch messages after insert".to_string(),
+                    )
+                    .into_response()
+                }
+            }
         }
         Err(e) => {
             error!(error = %e, conversation_id = id, "failed to insert messages");
