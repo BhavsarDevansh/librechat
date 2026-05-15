@@ -131,7 +131,7 @@ impl std::fmt::Display for ApiError {
 /// Resolve the full API base URL. If the user has configured a custom
 /// endpoint in settings, that is used. Otherwise falls back to the
 /// `window.__LIBRECHAT_API_URL__` JS property (empty string = same origin).
-fn resolve_api_base(custom_endpoint: &str) -> String {
+pub fn resolve_api_base(custom_endpoint: &str) -> String {
     if !custom_endpoint.is_empty() {
         return custom_endpoint.trim_end_matches('/').to_string();
     }
