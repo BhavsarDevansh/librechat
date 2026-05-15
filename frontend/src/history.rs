@@ -1,9 +1,8 @@
 //! Frontend API client for chat history endpoints.
 
-use gloo_net::http::{Request, RequestBuilder};
 use serde::{Deserialize, Serialize};
 
-use crate::api::{resolve_api_base, ApiError};
+use crate::api::{builder_with_auth, resolve_api_base, ApiError};
 
 /// Summary of a conversation from the history endpoint.
 #[derive(Debug, Clone, Deserialize)]
@@ -80,22 +79,6 @@ pub struct ApiAppendMessage {
 #[derive(Debug, Clone, Serialize)]
 pub struct ApiAppendMessagesRequest {
     pub messages: Vec<ApiAppendMessage>,
-}
-
-fn builder_with_auth(method: &str, url: &str, auth_key: &str) -> RequestBuilder {
-    let builder = match method {
-        "GET" => Request::get(url),
-        "POST" => Request::post(url),
-        "PATCH" => Request::patch(url),
-        "DELETE" => Request::delete(url),
-        _ => panic!("Unsupported HTTP method: {method}"),
-    };
-
-    if !auth_key.is_empty() {
-        builder.header("Authorization", &format!("Bearer {auth_key}"))
-    } else {
-        builder
-    }
 }
 
 /// Fetch the list of saved conversations.

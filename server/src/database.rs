@@ -3,12 +3,12 @@
 //! Provides pool creation, migration execution, repository functions for
 //! conversations and messages, and helpers for the default database URL.
 //!
-//! # Compile-time checked queries
-//!
-//! The module demonstrates SQLx compile-time checked queries via
-//! [`sqlx::query!`].  To build without a live database connection, run
-//! `cargo sqlx prepare --workspace` after ensuring migrations are applied to
-//! a local database and `DATABASE_URL` is exported.  The generated `.sqlx/`
+//! Repository functions use [`sqlx::query_as`](sqlx::query_as) with
+//! [`FromRow`](sqlx::FromRow) derive for straightforward CRUD.  The
+//! `table_exists` helper demonstrates SQLx compile-time checked queries via
+//! [`sqlx::query!`]; to build that path without a live database connection,
+//! run `cargo sqlx prepare --workspace` after ensuring migrations are applied
+//! to a local database and `DATABASE_URL` is exported.  The generated `.sqlx/`
 //! directory is checked into version control so that CI and fresh checkouts
 //! can compile offline.
 
@@ -114,7 +114,7 @@ pub struct Message {
     pub role: String,
     pub content: String,
     pub sequence: i64,
-    pub is_error: i64,
+    pub is_error: bool,
     pub created_at: Option<String>,
 }
 
@@ -174,6 +174,9 @@ pub async fn get_conversation(
 
 /// Update conversation metadata (title, model, provider).
 ///
+/// `COALESCE` is used for each field: a `Some` value (including an empty
+/// string) overwrites the existing column, while `None` leaves it unchanged.
+///
 /// Returns `true` if a row was updated.
 pub async fn update_conversation(
     pool: &SqlitePool,
@@ -227,7 +230,7 @@ pub async fn insert_messages(
         .bind(role)
         .bind(content)
         .bind(sequence)
-        .bind(if *is_error { 1i64 } else { 0i64 })
+        .bind(*is_error)
         .execute(&mut *tx)
         .await?;
     }

@@ -11,7 +11,7 @@ use crate::history;
 use leptos::prelude::*;
 
 /// Unique identifier for a chat thread (local only).
-pub type ThreadId = usize;
+pub type ThreadId = u64;
 
 /// A single chat thread containing its message history and metadata.
 #[derive(Debug, Clone)]
@@ -63,6 +63,8 @@ pub struct AppState {
     pub models_request_id: RwSignal<u64>,
     /// Error message from history operations, if any.
     pub history_error: RwSignal<Option<String>>,
+    /// ID of the thread currently being persisted (deduplication guard).
+    pub currently_persisting: RwSignal<Option<ThreadId>>,
 }
 
 impl AppState {
@@ -82,6 +84,7 @@ impl AppState {
             models_error: RwSignal::new(None),
             models_request_id: RwSignal::new(0),
             history_error: RwSignal::new(None),
+            currently_persisting: RwSignal::new(None),
         };
         provide_context(state);
         state.load_conversations();
@@ -107,23 +110,32 @@ impl AppState {
         leptos::task::spawn_local(async move {
             match history::fetch_conversations(&endpoint, &auth_key).await {
                 Ok(conversations) => {
-                    let mut threads = Vec::with_capacity(conversations.len());
+                    let mut threads = state.threads.get();
                     let mut max_id = state.next_thread_id.get();
                     for conv in conversations {
-                        let local_id = conv.id as usize;
+                        let local_id = conv.id as u64;
                         if local_id >= max_id {
                             max_id = local_id + 1;
                         }
-                        threads.push(ChatThread {
-                            id: local_id,
-                            backend_id: Some(conv.id),
-                            title: conv.title.unwrap_or_else(|| format!("Chat {}", conv.id)),
-                            messages: Vec::new(),
-                            persisted_count: 0,
-                        });
+                        // Update existing thread or create new one
+                        if let Some(existing) =
+                            threads.iter_mut().find(|t| t.backend_id == Some(conv.id))
+                        {
+                            existing.title =
+                                conv.title.unwrap_or_else(|| format!("Chat {}", conv.id));
+                        } else {
+                            threads.push(ChatThread {
+                                id: local_id,
+                                backend_id: Some(conv.id),
+                                title: conv.title.unwrap_or_else(|| format!("Chat {}", conv.id)),
+                                messages: Vec::new(),
+                                persisted_count: 0,
+                            });
+                        }
                     }
                     state.next_thread_id.set(max_id);
                     state.threads.set(threads);
+                    state.history_error.set(None);
                 }
                 Err(err) => {
                     state.history_error.set(Some(format!("{err}")));
@@ -138,15 +150,7 @@ impl AppState {
 
         let needs_load = self.threads.with(|threads| {
             let thread = threads.iter().find(|t| t.id == thread_id)?;
-            if let Some(bid) = thread.backend_id {
-                if thread.messages.is_empty() {
-                    Some((bid, thread.messages.len()))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+            thread.backend_id.map(|bid| (bid, thread.messages.len()))
         });
 
         if let Some((bid, msg_count)) = needs_load {
@@ -178,14 +182,11 @@ impl AppState {
                         state.next_message_id.set(next_id);
                         state.threads.update(|threads| {
                             if let Some(t) = threads.iter_mut().find(|t| t.id == thread_id) {
-                                let mut merged_messages = messages;
-                                if t.messages.len() > msg_count {
-                                    merged_messages.extend_from_slice(&t.messages[msg_count..]);
-                                }
-                                t.messages = merged_messages;
+                                t.messages = messages;
                                 t.persisted_count = msg_count;
                             }
                         });
+                        state.history_error.set(None);
                     }
                     Err(err) => {
                         state.history_error.set(Some(format!("{err}")));
@@ -275,22 +276,37 @@ impl AppState {
                 .and_then(|t| t.backend_id)
         });
 
-        self.threads.update(|threads| {
-            threads.retain(|t| t.id != thread_id);
-            let current = self.active_thread_id.get();
-            if current == Some(thread_id) {
-                self.active_thread_id.set(threads.last().map(|t| t.id));
-            }
-        });
-
+        // If there is a backend conversation, attempt deletion first; only
+        // remove locally on success so the user can retry on failure.
         if let Some(bid) = backend_id {
             let settings = self.settings.get();
             let endpoint = settings.api_endpoint.clone();
             let auth_key = settings.auth_key.clone();
             let state = *self;
             leptos::task::spawn_local(async move {
-                if let Err(err) = history::delete_conversation(&endpoint, &auth_key, bid).await {
-                    state.history_error.set(Some(format!("{err}")));
+                match history::delete_conversation(&endpoint, &auth_key, bid).await {
+                    Ok(_) => {
+                        state.threads.update(|threads| {
+                            threads.retain(|t| t.id != thread_id);
+                            let current = state.active_thread_id.get();
+                            if current == Some(thread_id) {
+                                state.active_thread_id.set(threads.last().map(|t| t.id));
+                            }
+                        });
+                        state.history_error.set(None);
+                    }
+                    Err(err) => {
+                        state.history_error.set(Some(format!("{err}")));
+                    }
+                }
+            });
+        } else {
+            // Local-only thread: remove immediately.
+            self.threads.update(|threads| {
+                threads.retain(|t| t.id != thread_id);
+                let current = self.active_thread_id.get();
+                if current == Some(thread_id) {
+                    self.active_thread_id.set(threads.last().map(|t| t.id));
                 }
             });
         }
@@ -323,42 +339,51 @@ impl AppState {
 
     /// Persist messages for a specific thread that have not yet been saved.
     pub fn persist_thread(&self, thread_id: ThreadId) {
-        let (backend_id, new_msgs) = match self.threads.with(|threads| {
-            let thread = threads.iter().find(|t| t.id == thread_id)?;
-            let backend_id = thread.backend_id?;
-            let start = thread.persisted_count;
-            let msgs: Vec<history::ApiAppendMessage> = thread
-                .messages
-                .iter()
-                .enumerate()
-                .skip(start)
-                .map(|(idx, m)| history::ApiAppendMessage {
-                    role: match m.role {
-                        MessageRole::User => "user".to_string(),
-                        MessageRole::Assistant => "assistant".to_string(),
-                    },
-                    content: m.content.clone(),
-                    sequence: idx as i64,
-                    is_error: m.is_error,
-                })
-                .collect();
-            Some((backend_id, msgs))
-        }) {
-            Some(v) => v,
-            None => return,
-        };
-
-        if new_msgs.is_empty() {
+        if self.currently_persisting.get() == Some(thread_id) {
             return;
         }
+        self.currently_persisting.set(Some(thread_id));
 
         let settings = self.settings.get();
         let endpoint = settings.api_endpoint.clone();
         let auth_key = settings.auth_key.clone();
-        let count = new_msgs.len();
         let state = *self;
 
         leptos::task::spawn_local(async move {
+            let (backend_id, new_msgs) = match state.threads.with(|threads| {
+                let thread = threads.iter().find(|t| t.id == thread_id)?;
+                let backend_id = thread.backend_id?;
+                let start = thread.persisted_count;
+                let msgs: Vec<history::ApiAppendMessage> = thread
+                    .messages
+                    .iter()
+                    .enumerate()
+                    .skip(start)
+                    .map(|(idx, m)| history::ApiAppendMessage {
+                        role: match m.role {
+                            MessageRole::User => "user".to_string(),
+                            MessageRole::Assistant => "assistant".to_string(),
+                        },
+                        content: m.content.clone(),
+                        sequence: idx as i64,
+                        is_error: m.is_error,
+                    })
+                    .collect();
+                Some((backend_id, msgs))
+            }) {
+                Some(v) => v,
+                None => {
+                    state.currently_persisting.set(None);
+                    return;
+                }
+            };
+
+            if new_msgs.is_empty() {
+                state.currently_persisting.set(None);
+                return;
+            }
+
+            let count = new_msgs.len();
             let req = history::ApiAppendMessagesRequest { messages: new_msgs };
             match history::append_messages(&endpoint, &auth_key, backend_id, &req).await {
                 Ok(_) => {
@@ -367,23 +392,18 @@ impl AppState {
                             t.persisted_count += count;
                         }
                     });
+                    state.history_error.set(None);
                 }
                 Err(err) => {
                     state.history_error.set(Some(format!("{err}")));
                 }
             }
+            state.currently_persisting.set(None);
         });
     }
 
     /// Persist any messages in the active thread that have not yet been saved.
-    pub fn persist_active_thread(&self) {
-        let active_id = match self.active_thread_id.get() {
-            Some(id) => id,
-            None => return,
-        };
-        self.persist_thread(active_id);
-    }
-
+    #[allow(dead_code)]
     /// Update the title of a thread on the backend.
     pub fn update_thread_title(&self, thread_id: ThreadId, title: String) {
         let backend_id = self.threads.with(|threads| {

@@ -97,19 +97,22 @@ impl From<crate::database::Message> for MessageResponse {
             role: msg.role,
             content: msg.content,
             sequence: msg.sequence,
-            is_error: msg.is_error != 0,
+            is_error: msg.is_error,
             created_at: msg.created_at,
         }
     }
 }
 
-fn no_db_error() -> impl IntoResponse {
+fn service_unavailable_error() -> impl IntoResponse {
     error_response(
         StatusCode::SERVICE_UNAVAILABLE,
         "Database not available".to_string(),
     )
 }
 
+const MAX_TITLE_LEN: usize = 256;
+const MAX_CONTENT_LEN: usize = 1_000_000; // 1 MB
+const MAX_BATCH_MESSAGES: usize = 1000;
 /// `GET /api/conversations` — list conversation summaries ordered by updated desc.
 pub async fn list_conversations_handler(
     State(state): State<AppState>,
@@ -117,7 +120,7 @@ pub async fn list_conversations_handler(
 ) -> impl IntoResponse {
     let pool = match &state.db_pool {
         Some(p) => p,
-        None => return no_db_error().into_response(),
+        None => return service_unavailable_error().into_response(),
     };
 
     let limit = query.limit.unwrap_or(100);
@@ -143,8 +146,18 @@ pub async fn create_conversation_handler(
 ) -> impl IntoResponse {
     let pool = match &state.db_pool {
         Some(p) => p,
-        None => return no_db_error().into_response(),
+        None => return service_unavailable_error().into_response(),
     };
+
+    if let Some(ref title) = payload.title {
+        if title.len() > MAX_TITLE_LEN {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                format!("Title exceeds {MAX_TITLE_LEN} characters"),
+            )
+            .into_response();
+        }
+    }
 
     match create_conversation(
         pool,
@@ -191,7 +204,7 @@ pub async fn get_conversation_handler(
 ) -> impl IntoResponse {
     let pool = match &state.db_pool {
         Some(p) => p,
-        None => return no_db_error().into_response(),
+        None => return service_unavailable_error().into_response(),
     };
 
     let conv = match get_conversation(pool, id).await {
@@ -246,8 +259,18 @@ pub async fn update_conversation_handler(
 ) -> impl IntoResponse {
     let pool = match &state.db_pool {
         Some(p) => p,
-        None => return no_db_error().into_response(),
+        None => return service_unavailable_error().into_response(),
     };
+
+    if let Some(ref title) = payload.title {
+        if title.len() > MAX_TITLE_LEN {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                format!("Title exceeds {MAX_TITLE_LEN} characters"),
+            )
+            .into_response();
+        }
+    }
 
     match update_conversation(
         pool,
@@ -298,7 +321,7 @@ pub async fn append_messages_handler(
 ) -> impl IntoResponse {
     let pool = match &state.db_pool {
         Some(p) => p,
-        None => return no_db_error().into_response(),
+        None => return service_unavailable_error().into_response(),
     };
 
     // Verify the conversation exists.
@@ -321,6 +344,24 @@ pub async fn append_messages_handler(
         }
     }
 
+    if payload.messages.len() > MAX_BATCH_MESSAGES {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            format!("Batch exceeds {MAX_BATCH_MESSAGES} messages"),
+        )
+        .into_response();
+    }
+
+    for m in &payload.messages {
+        if m.content.len() > MAX_CONTENT_LEN {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                format!("Message content exceeds {MAX_CONTENT_LEN} bytes"),
+            )
+            .into_response();
+        }
+    }
+
     let msgs: Vec<(String, String, i64, bool)> = payload
         .messages
         .into_iter()
@@ -334,18 +375,11 @@ pub async fn append_messages_handler(
                 message_count = msgs.len(),
                 "appended messages"
             );
-            let messages: Vec<MessageResponse> = match get_messages(pool, id).await {
-                Ok(rows) => rows.into_iter().map(MessageResponse::from).collect(),
-                Err(e) => {
-                    error!(error = %e, "failed to fetch messages after insert");
-                    return error_response(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to fetch messages".to_string(),
-                    )
-                    .into_response();
-                }
-            };
-            (StatusCode::OK, Json(messages)).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "appended": msgs.len() })),
+            )
+                .into_response()
         }
         Err(e) => {
             error!(error = %e, conversation_id = id, "failed to insert messages");
@@ -365,7 +399,7 @@ pub async fn delete_conversation_handler(
 ) -> impl IntoResponse {
     let pool = match &state.db_pool {
         Some(p) => p,
-        None => return no_db_error().into_response(),
+        None => return service_unavailable_error().into_response(),
     };
 
     match delete_conversation(pool, id).await {

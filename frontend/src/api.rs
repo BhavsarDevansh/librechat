@@ -159,10 +159,16 @@ fn js_api_base_url() -> String {
 }
 
 /// Build a `RequestBuilder` with optional `Authorization: Bearer` header.
-fn builder_with_auth(method: &str, url: &str, auth_key: &str) -> gloo_net::http::RequestBuilder {
+pub fn builder_with_auth(
+    method: &str,
+    url: &str,
+    auth_key: &str,
+) -> gloo_net::http::RequestBuilder {
     let builder = match method {
         "GET" => Request::get(url),
         "POST" => Request::post(url),
+        "PATCH" => Request::patch(url),
+        "DELETE" => Request::delete(url),
         _ => panic!("Unsupported HTTP method: {method}"),
     };
 

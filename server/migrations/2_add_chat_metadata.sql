@@ -14,3 +14,6 @@ BEGIN
     UPDATE conversations SET updated_at = CURRENT_TIMESTAMP
     WHERE id = NEW.conversation_id;
 END;
+
+-- Index to speed up list_conversations ordering by updated_at.
+CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at);

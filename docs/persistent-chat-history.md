@@ -109,7 +109,7 @@ Appends one or more messages.
 }
 ```
 
-**Response `200 OK`** — returns the full ordered message list.
+**Response `200 OK`** — returns `{ "appended": N }` indicating how many messages were stored.
 
 **Response `404 Not Found`** — conversation does not exist.
 

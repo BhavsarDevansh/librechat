@@ -268,8 +268,6 @@ async fn test_list_conversations_ordered_by_updated_desc() {
 
     // Sleep to cross a second boundary so updated_at changes
     tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
-
-    // Sleep to cross a second boundary so updated_at changes
     let patch_payload = serde_json::json!({ "title": "First Updated" });
     let patch_request = Request::builder()
         .method("PATCH")
