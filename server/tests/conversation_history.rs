@@ -113,6 +113,7 @@ async fn test_fetch_conversation_with_messages() {
         .body(Body::from(create_payload.to_string()))
         .expect("build request");
     let create_response = app.clone().oneshot(create_request).await.expect("oneshot");
+    assert_eq!(create_response.status(), StatusCode::OK);
     let create_body = response_body_json(create_response).await;
     let conv_id = create_body["id"].as_i64().expect("id");
 
@@ -170,6 +171,7 @@ async fn test_update_conversation_title() {
         .body(Body::from(create_payload.to_string()))
         .expect("build request");
     let create_response = app.clone().oneshot(create_request).await.expect("oneshot");
+    assert_eq!(create_response.status(), StatusCode::OK);
     let create_body = response_body_json(create_response).await;
     let conv_id = create_body["id"].as_i64().expect("id");
 
@@ -206,6 +208,7 @@ async fn test_delete_conversation() {
         .body(Body::from(create_payload.to_string()))
         .expect("build request");
     let create_response = app.clone().oneshot(create_request).await.expect("oneshot");
+    assert_eq!(create_response.status(), StatusCode::OK);
     let create_body = response_body_json(create_response).await;
     let conv_id = create_body["id"].as_i64().expect("id");
 
@@ -246,6 +249,7 @@ async fn test_list_conversations_ordered_by_updated_desc() {
         .body(Body::from(c1_payload.to_string()))
         .expect("build request");
     let c1_response = app.clone().oneshot(c1_request).await.expect("oneshot");
+    assert_eq!(c1_response.status(), StatusCode::OK);
     let c1_body = response_body_json(c1_response).await;
     let id1 = c1_body["id"].as_i64().expect("id");
 
@@ -258,6 +262,7 @@ async fn test_list_conversations_ordered_by_updated_desc() {
         .body(Body::from(c2_payload.to_string()))
         .expect("build request");
     let c2_response = app.clone().oneshot(c2_request).await.expect("oneshot");
+    assert_eq!(c2_response.status(), StatusCode::OK);
     let c2_body = response_body_json(c2_response).await;
     let _id2 = c2_body["id"].as_i64().expect("id");
 
@@ -272,7 +277,8 @@ async fn test_list_conversations_ordered_by_updated_desc() {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(patch_payload.to_string()))
         .expect("build request");
-    app.clone().oneshot(patch_request).await.expect("oneshot");
+    let patch_response = app.clone().oneshot(patch_request).await.expect("oneshot");
+    assert_eq!(patch_response.status(), StatusCode::OK);
 
     // List should have First Updated first, then Second
     let list_request = Request::builder()
@@ -281,6 +287,7 @@ async fn test_list_conversations_ordered_by_updated_desc() {
         .body(Body::empty())
         .expect("build request");
     let list_response = app.oneshot(list_request).await.expect("oneshot");
+    assert_eq!(list_response.status(), StatusCode::OK);
     let list_body = response_body_json(list_response).await;
     let list = list_body.as_array().expect("array");
     assert_eq!(list.len(), 2);

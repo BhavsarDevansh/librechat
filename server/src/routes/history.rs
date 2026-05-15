@@ -10,7 +10,7 @@ use crate::database::{
 };
 use crate::routes::error::error_response;
 use crate::state::AppState;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -37,6 +37,15 @@ pub struct UpdateConversationRequest {
     pub model: Option<String>,
     #[serde(default)]
     pub provider: Option<String>,
+}
+
+/// Pagination query for listing conversations.
+#[derive(Debug, Deserialize)]
+pub struct ListConversationsQuery {
+    #[serde(default)]
+    pub limit: Option<i64>,
+    #[serde(default)]
+    pub offset: Option<i64>,
 }
 
 /// A single message to append.
@@ -102,13 +111,19 @@ fn no_db_error() -> impl IntoResponse {
 }
 
 /// `GET /api/conversations` — list conversation summaries ordered by updated desc.
-pub async fn list_conversations_handler(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_conversations_handler(
+    State(state): State<AppState>,
+    Query(query): Query<ListConversationsQuery>,
+) -> impl IntoResponse {
     let pool = match &state.db_pool {
         Some(p) => p,
         None => return no_db_error().into_response(),
     };
 
-    match list_conversations(pool).await {
+    let limit = query.limit.unwrap_or(100);
+    let offset = query.offset.unwrap_or(0);
+
+    match list_conversations(pool, limit, offset).await {
         Ok(rows) => (StatusCode::OK, Json(rows)).into_response(),
         Err(e) => {
             error!(error = %e, "failed to list conversations");

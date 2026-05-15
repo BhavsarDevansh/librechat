@@ -880,7 +880,7 @@ textarea:focus-visible {
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   background: var(--color-error-bg);
-  color: var(--color-text);
+  color: var(--color-text-primary);
   border-bottom: 1px solid var(--color-error);
   font-size: 0.875rem;
 }
@@ -891,7 +891,7 @@ textarea:focus-visible {
 
 .history-error-dismiss {
   padding: 0.25rem 0.5rem;
-  border: 1px solid currentColor;
+  border: 1px solid currentcolor;
   border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;

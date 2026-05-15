@@ -178,7 +178,11 @@ impl AppState {
                         state.next_message_id.set(next_id);
                         state.threads.update(|threads| {
                             if let Some(t) = threads.iter_mut().find(|t| t.id == thread_id) {
-                                t.messages = messages;
+                                let mut merged_messages = messages;
+                                if t.messages.len() > msg_count {
+                                    merged_messages.extend_from_slice(&t.messages[msg_count..]);
+                                }
+                                t.messages = merged_messages;
                                 t.persisted_count = msg_count;
                             }
                         });
@@ -220,11 +224,39 @@ impl AppState {
             };
             match history::create_conversation(&endpoint, &auth_key, &req).await {
                 Ok(conv) => {
+                    let title_to_sync = state.threads.with(|threads| {
+                        threads.iter().find(|t| t.id == id).and_then(|t| {
+                            if t.backend_id.is_none() && !t.title.is_empty() {
+                                Some(t.title.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    });
                     state.threads.update(|threads| {
                         if let Some(t) = threads.iter_mut().find(|t| t.id == id) {
                             t.backend_id = Some(conv.id);
                         }
                     });
+                    if let Some(title) = title_to_sync {
+                        let settings = state.settings.get();
+                        let endpoint = settings.api_endpoint.clone();
+                        let auth_key = settings.auth_key.clone();
+                        let state = state;
+                        leptos::task::spawn_local(async move {
+                            let req = history::ApiUpdateConversationRequest {
+                                title: Some(title),
+                                model: None,
+                                provider: None,
+                            };
+                            if let Err(err) =
+                                history::update_conversation(&endpoint, &auth_key, conv.id, &req)
+                                    .await
+                            {
+                                state.history_error.set(Some(format!("{err}")));
+                            }
+                        });
+                    }
                 }
                 Err(err) => {
                     state.history_error.set(Some(format!("{err}")));
@@ -289,15 +321,10 @@ impl AppState {
         })
     }
 
-    /// Persist any messages in the active thread that have not yet been saved.
-    pub fn persist_active_thread(&self) {
-        let active_id = match self.active_thread_id.get() {
-            Some(id) => id,
-            None => return,
-        };
-
+    /// Persist messages for a specific thread that have not yet been saved.
+    pub fn persist_thread(&self, thread_id: ThreadId) {
         let (backend_id, new_msgs) = match self.threads.with(|threads| {
-            let thread = threads.iter().find(|t| t.id == active_id)?;
+            let thread = threads.iter().find(|t| t.id == thread_id)?;
             let backend_id = thread.backend_id?;
             let start = thread.persisted_count;
             let msgs: Vec<history::ApiAppendMessage> = thread
@@ -336,7 +363,7 @@ impl AppState {
             match history::append_messages(&endpoint, &auth_key, backend_id, &req).await {
                 Ok(_) => {
                     state.threads.update(|threads| {
-                        if let Some(t) = threads.iter_mut().find(|t| t.id == active_id) {
+                        if let Some(t) = threads.iter_mut().find(|t| t.id == thread_id) {
                             t.persisted_count += count;
                         }
                     });
@@ -346,6 +373,15 @@ impl AppState {
                 }
             }
         });
+    }
+
+    /// Persist any messages in the active thread that have not yet been saved.
+    pub fn persist_active_thread(&self) {
+        let active_id = match self.active_thread_id.get() {
+            Some(id) => id,
+            None => return,
+        };
+        self.persist_thread(active_id);
     }
 
     /// Update the title of a thread on the backend.

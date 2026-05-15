@@ -137,15 +137,22 @@ pub async fn create_conversation(
     Ok(result.last_insert_rowid())
 }
 
-/// List all conversations ordered by most recently updated first.
+/// List conversations ordered by most recently updated first.
 pub async fn list_conversations(
     pool: &SqlitePool,
+    limit: i64,
+    offset: i64,
 ) -> Result<Vec<ConversationSummary>, sqlx::Error> {
+    let limit = limit.clamp(1, 1000);
+    let offset = offset.max(0);
     sqlx::query_as::<_, ConversationSummary>(
         "SELECT id, title, model, provider, created_at, updated_at
          FROM conversations
-         ORDER BY updated_at DESC, id DESC",
+         ORDER BY updated_at DESC, id DESC
+         LIMIT ?1 OFFSET ?2",
     )
+    .bind(limit)
+    .bind(offset)
     .fetch_all(pool)
     .await
 }

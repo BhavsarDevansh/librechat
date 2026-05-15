@@ -294,7 +294,7 @@ pub fn ChatView() -> impl IntoView {
             }
 
             // Persist the completed turn to the backend.
-            state.persist_active_thread();
+            state.persist_thread(active_id);
         });
     };
 
