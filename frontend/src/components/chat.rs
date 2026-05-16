@@ -223,6 +223,8 @@ pub fn ChatView() -> impl IntoView {
         let settings = state.settings.get();
         let endpoint = settings.api_endpoint.clone();
         let auth_key = settings.auth_key.clone();
+        let temperature = settings.temperature;
+        let max_tokens = settings.max_tokens.map(|v| v as u32);
 
         let assistant_id = state.next_message_id.get();
         state.next_message_id.update(|id| *id += 1);
@@ -240,8 +242,14 @@ pub fn ChatView() -> impl IntoView {
         });
 
         leptos::task::spawn_local(async move {
-            let result =
-                api::stream_chat_request(&api_messages, &model, &endpoint, &auth_key, |chunk| {
+            let result = api::stream_chat_request(
+                &api_messages,
+                &model,
+                &endpoint,
+                &auth_key,
+                temperature,
+                max_tokens,
+                |chunk| {
                     if let Some(content) =
                         chunk.choices.first().and_then(|c| c.delta.content.as_ref())
                     {
@@ -255,8 +263,9 @@ pub fn ChatView() -> impl IntoView {
                             }
                         });
                     }
-                })
-                .await;
+                },
+            )
+            .await;
 
             set_loading.set(false);
 

@@ -3,3 +3,4 @@
 /frontend/target
 /server/target
 *.wasm
+*.db

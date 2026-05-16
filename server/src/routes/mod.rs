@@ -6,3 +6,4 @@ pub mod error;
 pub mod health;
 pub mod history;
 pub mod models;
+pub mod settings;

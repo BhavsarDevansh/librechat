@@ -158,6 +158,17 @@ fn js_api_base_url() -> String {
     value.as_string().unwrap_or_default()
 }
 
+/// Settings persisted on the backend.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ApiSettings {
+    pub api_endpoint: String,
+    pub auth_key: String,
+    pub model: String,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<i64>,
+    pub sidebar_collapsed: bool,
+}
+
 /// Build a `RequestBuilder` with optional `Authorization: Bearer` header.
 pub fn builder_with_auth(
     method: &str,
@@ -167,6 +178,7 @@ pub fn builder_with_auth(
     let builder = match method {
         "GET" => Request::get(url),
         "POST" => Request::post(url),
+        "PUT" => Request::put(url),
         "PATCH" => Request::patch(url),
         "DELETE" => Request::delete(url),
         _ => panic!("Unsupported HTTP method: {method}"),
@@ -191,6 +203,8 @@ pub async fn send_chat_request(
     model: &str,
     endpoint: &str,
     auth_key: &str,
+    temperature: Option<f64>,
+    max_tokens: Option<u32>,
 ) -> Result<ApiChatCompletionResponse, ApiError> {
     let base = resolve_api_base(endpoint);
     let url = format!("{base}/api/chat/completions");
@@ -202,8 +216,8 @@ pub async fn send_chat_request(
             model.to_string()
         },
         messages: messages.to_vec(),
-        temperature: None,
-        max_tokens: None,
+        temperature,
+        max_tokens,
         stream: Some(false),
     };
 
@@ -267,6 +281,62 @@ pub async fn fetch_models(endpoint: &str, auth_key: &str) -> Result<Vec<ApiModel
     Ok(models_response.models)
 }
 
+/// Fetch persisted settings from the backend.
+pub async fn fetch_settings(base_url: &str, auth_key: &str) -> Result<ApiSettings, ApiError> {
+    let url = format!("{base_url}/api/settings");
+    let response = builder_with_auth("GET", &url, auth_key)
+        .send()
+        .await
+        .map_err(|e| ApiError::Network(e.to_string()))?;
+
+    let status = response.status();
+
+    if !response.ok() {
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "<no body>".to_string());
+        return Err(ApiError::Http {
+            status,
+            body: body.chars().take(512).collect(),
+        });
+    }
+
+    response
+        .json::<ApiSettings>()
+        .await
+        .map_err(|e| ApiError::Parse(format!("invalid settings: {e}")))
+}
+
+/// Persist settings to the backend.
+pub async fn save_settings(
+    base_url: &str,
+    auth_key: &str,
+    settings: &ApiSettings,
+) -> Result<(), ApiError> {
+    let url = format!("{base_url}/api/settings");
+    let response = builder_with_auth("PUT", &url, auth_key)
+        .json(settings)
+        .map_err(|e| ApiError::Network(e.to_string()))?
+        .send()
+        .await
+        .map_err(|e| ApiError::Network(e.to_string()))?;
+
+    let status = response.status();
+
+    if !response.ok() {
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "<no body>".to_string());
+        return Err(ApiError::Http {
+            status,
+            body: body.chars().take(512).collect(),
+        });
+    }
+    Ok(())
+}
+
 fn is_char_start(b: u8) -> bool {
     // ASCII or multi-byte leader (not a continuation byte)
     (b & 0b1100_0000) != 0b1000_0000
@@ -284,6 +354,8 @@ pub async fn stream_chat_request(
     model: &str,
     endpoint: &str,
     auth_key: &str,
+    temperature: Option<f64>,
+    max_tokens: Option<u32>,
     mut on_chunk: impl FnMut(ApiChatCompletionChunk),
 ) -> Result<(), ApiError> {
     let base = resolve_api_base(endpoint);
@@ -296,8 +368,8 @@ pub async fn stream_chat_request(
             model.to_string()
         },
         messages: messages.to_vec(),
-        temperature: None,
-        max_tokens: None,
+        temperature,
+        max_tokens,
         stream: Some(true),
     };
 
