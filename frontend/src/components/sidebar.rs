@@ -57,12 +57,12 @@ pub fn Sidebar() -> impl IntoView {
                             aria-selected=move || state.active_thread_id.get() == Some(thread.id)
                             tabindex="0"
                             on:click=move |_| {
-                                state.active_thread_id.set(Some(thread.id));
+                                state.activate_thread(thread.id);
                             }
                             on:keydown=move |ev: web_sys::KeyboardEvent| {
                                 if ev.key() == "Enter" || ev.key() == " " {
                                     ev.prevent_default();
-                                    state.active_thread_id.set(Some(thread.id));
+                                    state.activate_thread(thread.id);
                                 }
                             }
                         >

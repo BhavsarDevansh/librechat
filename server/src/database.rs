@@ -1,16 +1,14 @@
 //! SQLite persistence layer for the LibreChat server.
 //!
-//! Provides pool creation, migration execution, and helpers for the
-//! default database URL.  The module is intentionally small so that later
-//! issues can introduce repository functions rather than issuing ad-hoc SQL
-//! from route handlers.
+//! Provides pool creation, migration execution, repository functions for
+//! conversations and messages, and helpers for the default database URL.
 //!
-//! # Compile-time checked queries
-//!
-//! The module demonstrates SQLx compile-time checked queries via
-//! [`sqlx::query!`].  To build without a live database connection, run
-//! `cargo sqlx prepare --workspace` after ensuring migrations are applied to
-//! a local database and `DATABASE_URL` is exported.  The generated `.sqlx/`
+//! Repository functions use [`sqlx::query_as`](sqlx::query_as) with
+//! [`FromRow`](sqlx::FromRow) derive for straightforward CRUD.  The
+//! `table_exists` helper demonstrates SQLx compile-time checked queries via
+//! [`sqlx::query!`]; to build that path without a live database connection,
+//! run `cargo sqlx prepare --workspace` after ensuring migrations are applied
+//! to a local database and `DATABASE_URL` is exported.  The generated `.sqlx/`
 //! directory is checked into version control so that CI and fresh checkouts
 //! can compile offline.
 
@@ -57,7 +55,9 @@ pub async fn init_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(1800);
 
-    let opts = SqliteConnectOptions::from_str(database_url)?.create_if_missing(true).foreign_keys(true);
+    let opts = SqliteConnectOptions::from_str(database_url)?
+        .create_if_missing(true)
+        .foreign_keys(true);
 
     SqlitePoolOptions::new()
         .max_connections(max_connections)
@@ -89,4 +89,167 @@ pub async fn table_exists(pool: &SqlitePool, table_name: &str) -> Result<bool, s
     .fetch_one(pool)
     .await?;
     Ok(row.count > 0)
+}
+
+// ---------------------------------------------------------------------------
+// Conversation & Message repository
+// ---------------------------------------------------------------------------
+
+/// Summary of a conversation returned by list endpoints.
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct ConversationSummary {
+    pub id: i64,
+    pub title: Option<String>,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// A single message belonging to a conversation.
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct Message {
+    pub id: i64,
+    pub conversation_id: i64,
+    pub role: String,
+    pub content: String,
+    pub sequence: i64,
+    pub is_error: bool,
+    pub created_at: Option<String>,
+}
+
+/// Create a new conversation.
+///
+/// Returns the auto-generated row id.
+pub async fn create_conversation(
+    pool: &SqlitePool,
+    title: Option<&str>,
+    model: Option<&str>,
+    provider: Option<&str>,
+) -> Result<i64, sqlx::Error> {
+    let result =
+        sqlx::query("INSERT INTO conversations (title, model, provider) VALUES (?1, ?2, ?3)")
+            .bind(title)
+            .bind(model)
+            .bind(provider)
+            .execute(pool)
+            .await?;
+    Ok(result.last_insert_rowid())
+}
+
+/// List conversations ordered by most recently updated first.
+pub async fn list_conversations(
+    pool: &SqlitePool,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<ConversationSummary>, sqlx::Error> {
+    let limit = limit.clamp(1, 1000);
+    let offset = offset.max(0);
+    sqlx::query_as::<_, ConversationSummary>(
+        "SELECT id, title, model, provider, created_at, updated_at
+         FROM conversations
+         ORDER BY updated_at DESC, id DESC
+         LIMIT ?1 OFFSET ?2",
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+}
+
+/// Fetch a single conversation by id.
+pub async fn get_conversation(
+    pool: &SqlitePool,
+    id: i64,
+) -> Result<Option<ConversationSummary>, sqlx::Error> {
+    sqlx::query_as::<_, ConversationSummary>(
+        "SELECT id, title, model, provider, created_at, updated_at
+         FROM conversations
+         WHERE id = ?1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Update conversation metadata (title, model, provider).
+///
+/// `COALESCE` is used for each field: a `Some` value (including an empty
+/// string) overwrites the existing column, while `None` leaves it unchanged.
+///
+/// Returns `true` if a row was updated.
+pub async fn update_conversation(
+    pool: &SqlitePool,
+    id: i64,
+    title: Option<&str>,
+    model: Option<&str>,
+    provider: Option<&str>,
+) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query(
+        "UPDATE conversations
+         SET title = COALESCE(?1, title),
+             model = COALESCE(?2, model),
+             provider = COALESCE(?3, provider)
+         WHERE id = ?4",
+    )
+    .bind(title)
+    .bind(model)
+    .bind(provider)
+    .bind(id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(rows > 0)
+}
+
+/// Delete a conversation (cascades to messages via foreign key).
+///
+/// Returns `true` if a row was deleted.
+pub async fn delete_conversation(pool: &SqlitePool, id: i64) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query("DELETE FROM conversations WHERE id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected();
+    Ok(rows > 0)
+}
+
+/// Insert one or more messages into a conversation.
+pub async fn insert_messages(
+    pool: &SqlitePool,
+    conversation_id: i64,
+    messages: &[(String, String, i64, bool)], // (role, content, sequence, is_error)
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    for (role, content, sequence, is_error) in messages {
+        sqlx::query(
+            "INSERT INTO messages (conversation_id, role, content, sequence, is_error)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .bind(conversation_id)
+        .bind(role)
+        .bind(content)
+        .bind(sequence)
+        .bind(*is_error)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Fetch ordered messages for a conversation.
+pub async fn get_messages(
+    pool: &SqlitePool,
+    conversation_id: i64,
+) -> Result<Vec<Message>, sqlx::Error> {
+    sqlx::query_as::<_, Message>(
+        "SELECT id, conversation_id, role, content, sequence, is_error, created_at
+         FROM messages
+         WHERE conversation_id = ?1
+         ORDER BY sequence ASC, id ASC",
+    )
+    .bind(conversation_id)
+    .fetch_all(pool)
+    .await
 }

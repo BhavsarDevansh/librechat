@@ -140,7 +140,6 @@ pub fn ModelSelector() -> impl IntoView {
 pub fn ChatView() -> impl IntoView {
     let state = AppState::expect();
     let (loading, set_loading) = signal(false);
-    let next_id = RwSignal::new(0usize);
 
     let active_messages = move || state.active_messages();
 
@@ -157,8 +156,8 @@ pub fn ChatView() -> impl IntoView {
         let active_id = state.active_thread_id.get().unwrap();
 
         let user_id = {
-            let prev = next_id.get();
-            next_id.update(|id| *id += 1);
+            let prev = state.next_message_id.get();
+            state.next_message_id.update(|id| *id += 1);
             prev
         };
 
@@ -176,20 +175,27 @@ pub fn ChatView() -> impl IntoView {
             thread.is_none_or(|t| t.messages.is_empty())
         };
 
-        state.threads.update(|threads| {
-            if let Some(thread) = threads.iter_mut().find(|t| t.id == active_id) {
-                thread.messages.push(user_msg);
-                if is_first_message {
-                    let title = if text.chars().count() > 30 {
-                        let truncated: String = text.chars().take(30).collect();
-                        format!("{truncated}…")
-                    } else {
-                        text.clone()
-                    };
-                    thread.title = title;
+        if is_first_message {
+            let title = if text.chars().count() > 30 {
+                let truncated: String = text.chars().take(30).collect();
+                format!("{truncated}…")
+            } else {
+                text.clone()
+            };
+            state.threads.update(|threads| {
+                if let Some(thread) = threads.iter_mut().find(|t| t.id == active_id) {
+                    thread.messages.push(user_msg);
+                    thread.title = title.clone();
                 }
-            }
-        });
+            });
+            state.update_thread_title(active_id, title);
+        } else {
+            state.threads.update(|threads| {
+                if let Some(thread) = threads.iter_mut().find(|t| t.id == active_id) {
+                    thread.messages.push(user_msg);
+                }
+            });
+        }
 
         set_loading.set(true);
 
@@ -218,8 +224,8 @@ pub fn ChatView() -> impl IntoView {
         let endpoint = settings.api_endpoint.clone();
         let auth_key = settings.auth_key.clone();
 
-        let assistant_id = next_id.get();
-        next_id.update(|id| *id += 1);
+        let assistant_id = state.next_message_id.get();
+        state.next_message_id.update(|id| *id += 1);
 
         // Add empty assistant placeholder so the UI shows a bubble immediately.
         state.threads.update(|threads| {
@@ -286,11 +292,25 @@ pub fn ChatView() -> impl IntoView {
                     });
                 }
             }
+
+            // Persist the completed turn to the backend.
+            state.persist_thread(active_id);
         });
+    };
+
+    let dismiss_history_error = move |_| {
+        state.history_error.set(None);
     };
 
     view! {
         <div class="flex-column-full">
+            <Show
+                when=move || state.history_error.get().is_some()>
+                <div class="history-error-banner">
+                    <span class="history-error-text">{move || state.history_error.get().unwrap_or_default()}</span>
+                    <button class="history-error-dismiss" on:click=dismiss_history_error>"Dismiss"</button>
+                </div>
+            </Show>
             <div class="chat-header">
                 <ModelSelector />
             </div>

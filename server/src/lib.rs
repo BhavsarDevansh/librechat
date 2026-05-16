@@ -46,6 +46,12 @@ const DEFAULT_ALLOWED_ORIGINS: &[&str] = &[
 ///   the configured provider
 /// - `POST /api/chat/completions/stream` — streams chat completions to the
 ///   client using Server-Sent Events
+/// - `GET /api/conversations` — list saved conversations
+/// - `POST /api/conversations` — create a conversation
+/// - `GET /api/conversations/{id}` — fetch a conversation with messages
+/// - `PATCH /api/conversations/{id}` — update conversation metadata
+/// - `POST /api/conversations/{id}/messages` — append messages
+/// - `DELETE /api/conversations/{id}` — delete a conversation
 ///
 /// Static files:
 /// - `/` — `ServeDir` serves the Leptos WASM frontend from the configured
@@ -75,6 +81,21 @@ pub fn app(state: AppState) -> Router {
             "/api/chat/completions/stream",
             post(routes::chat_stream::chat_completion_stream),
         )
+        .route(
+            "/api/conversations",
+            get(routes::history::list_conversations_handler)
+                .post(routes::history::create_conversation_handler),
+        )
+        .route(
+            "/api/conversations/{id}",
+            get(routes::history::get_conversation_handler)
+                .patch(routes::history::update_conversation_handler)
+                .delete(routes::history::delete_conversation_handler),
+        )
+        .route(
+            "/api/conversations/{id}/messages",
+            post(routes::history::append_messages_handler),
+        )
         .layer(TraceLayer::new_for_http())
         .layer(build_cors_layer())
         .fallback_service(serve_dir)
@@ -96,7 +117,13 @@ fn build_cors_layer() -> CorsLayer {
 
     CorsLayer::new()
         .allow_origin(allowed_origins)
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
         .allow_credentials(false)
 }

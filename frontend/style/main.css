@@ -869,3 +869,37 @@ textarea:focus-visible {
   }
 }
 
+
+/* ==========================================================================
+   14. History error banner
+   ========================================================================== */
+.history-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-error-bg);
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-error);
+  font-size: 0.875rem;
+}
+
+.history-error-text {
+  flex: 1;
+}
+
+.history-error-dismiss {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid currentcolor;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.history-error-dismiss:hover {
+  background: var(--color-error);
+  color: white;
+}

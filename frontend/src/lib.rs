@@ -1,5 +1,6 @@
 mod api;
 mod components;
+pub mod history;
 mod sse;
 mod state;
 
