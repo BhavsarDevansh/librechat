@@ -52,6 +52,8 @@ const DEFAULT_ALLOWED_ORIGINS: &[&str] = &[
 /// - `PATCH /api/conversations/{id}` — update conversation metadata
 /// - `POST /api/conversations/{id}/messages` — append messages
 /// - `DELETE /api/conversations/{id}` — delete a conversation
+/// - `GET /api/settings` — read persisted application settings
+/// - `PUT /api/settings` — update application settings
 ///
 /// Static files:
 /// - `/` — `ServeDir` serves the Leptos WASM frontend from the configured
@@ -96,6 +98,11 @@ pub fn app(state: AppState) -> Router {
             "/api/conversations/{id}/messages",
             post(routes::history::append_messages_handler),
         )
+        .route(
+            "/api/settings",
+            get(routes::settings::get_settings_handler)
+                .put(routes::settings::update_settings_handler),
+        )
         .layer(TraceLayer::new_for_http())
         .layer(build_cors_layer())
         .fallback_service(serve_dir)
@@ -120,6 +127,7 @@ fn build_cors_layer() -> CorsLayer {
         .allow_methods([
             Method::GET,
             Method::POST,
+            Method::PUT,
             Method::PATCH,
             Method::DELETE,
             Method::OPTIONS,

@@ -10,6 +10,10 @@ pub fn Sidebar() -> impl IntoView {
 
     let toggle_sidebar = move |_| {
         state.sidebar_collapsed.update(|c| *c = !*c);
+        state.settings.update(|s| {
+            s.sidebar_collapsed = state.sidebar_collapsed.get();
+        });
+        state.save_settings();
     };
 
     let new_chat = move |_| {

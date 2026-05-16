@@ -253,3 +253,79 @@ pub async fn get_messages(
     .fetch_all(pool)
     .await
 }
+
+// ---------------------------------------------------------------------------
+// Application settings repository (single-row table, id = 1)
+// ---------------------------------------------------------------------------
+
+/// Persisted application settings.
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct AppSettingsRow {
+    pub api_endpoint: String,
+    pub auth_key: String,
+    pub model: String,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<i64>,
+    pub sidebar_collapsed: i64,
+}
+
+/// Default settings used when the database row has not been created yet.
+impl Default for AppSettingsRow {
+    fn default() -> Self {
+        Self {
+            api_endpoint: String::new(),
+            auth_key: String::new(),
+            model: "llama3".to_string(),
+            temperature: None,
+            max_tokens: None,
+            sidebar_collapsed: 0,
+        }
+    }
+}
+
+/// Fetch the single settings row, returning defaults if none exists.
+pub async fn get_settings(pool: &SqlitePool) -> Result<AppSettingsRow, sqlx::Error> {
+    let row = sqlx::query_as::<_, AppSettingsRow>(
+        "SELECT api_endpoint, auth_key, model, temperature, max_tokens, sidebar_collapsed
+         FROM app_settings WHERE id = 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.unwrap_or_default())
+}
+
+/// Upsert the single settings row.
+///
+/// Uses `INSERT ... ON CONFLICT(id) DO UPDATE` so that repeated calls
+/// always replace the existing row.
+pub async fn upsert_settings(
+    pool: &SqlitePool,
+    api_endpoint: &str,
+    auth_key: &str,
+    model: &str,
+    temperature: Option<f64>,
+    max_tokens: Option<i64>,
+    sidebar_collapsed: bool,
+) -> Result<(), sqlx::Error> {
+    let sidebar_int = if sidebar_collapsed { 1 } else { 0 };
+    sqlx::query(
+        "INSERT INTO app_settings (id, api_endpoint, auth_key, model, temperature, max_tokens, sidebar_collapsed)
+         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(id) DO UPDATE SET
+             api_endpoint = excluded.api_endpoint,
+             auth_key = excluded.auth_key,
+             model = excluded.model,
+             temperature = excluded.temperature,
+             max_tokens = excluded.max_tokens,
+             sidebar_collapsed = excluded.sidebar_collapsed",
+    )
+    .bind(api_endpoint)
+    .bind(auth_key)
+    .bind(model)
+    .bind(temperature)
+    .bind(max_tokens)
+    .bind(sidebar_int)
+    .execute(pool)
+    .await?;
+    Ok(())
+}

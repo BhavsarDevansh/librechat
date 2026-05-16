@@ -31,6 +31,14 @@ pub struct AppSettings {
     pub api_endpoint: String,
     /// Optional authentication key for the API.
     pub auth_key: String,
+    /// Selected model name.
+    pub model: String,
+    /// Generation temperature.
+    pub temperature: Option<f64>,
+    /// Maximum tokens per generation.
+    pub max_tokens: Option<i64>,
+    /// Whether the sidebar is collapsed.
+    pub sidebar_collapsed: bool,
 }
 
 /// Provides the global application state via Leptos context.
@@ -91,6 +99,7 @@ impl AppState {
         };
         provide_context(state);
         state.load_conversations();
+        state.load_settings();
         state
     }
 
@@ -138,6 +147,57 @@ impl AppState {
                     }
                     state.next_thread_id.set(max_id);
                     state.threads.set(threads);
+                    state.history_error.set(None);
+                }
+                Err(err) => {
+                    state.history_error.set(Some(format!("{err}")));
+                }
+            }
+        });
+    }
+
+    /// Load persisted application settings from the backend.
+    fn load_settings(&self) {
+        let state = *self;
+        leptos::task::spawn_local(async move {
+            let base = api::resolve_api_base("");
+            match api::fetch_settings(&base, "").await {
+                Ok(settings) => {
+                    state.settings.update(|s| {
+                        s.api_endpoint = settings.api_endpoint;
+                        s.auth_key = settings.auth_key;
+                        s.model = settings.model.clone();
+                        s.temperature = settings.temperature;
+                        s.max_tokens = settings.max_tokens;
+                        s.sidebar_collapsed = settings.sidebar_collapsed;
+                    });
+                    state.selected_model.set(settings.model);
+                    state.sidebar_collapsed.set(settings.sidebar_collapsed);
+                }
+                Err(_err) => {
+                    // Silently fall back to defaults on first load or when
+                    // the backend has no database pool.
+                }
+            }
+        });
+    }
+
+    /// Persist current application settings to the backend.
+    pub fn save_settings(&self) {
+        let settings = self.settings.get();
+        let base = api::resolve_api_base("");
+        let state = *self;
+        leptos::task::spawn_local(async move {
+            let payload = api::ApiSettings {
+                api_endpoint: settings.api_endpoint,
+                auth_key: settings.auth_key,
+                model: settings.model.clone(),
+                temperature: settings.temperature,
+                max_tokens: settings.max_tokens,
+                sidebar_collapsed: settings.sidebar_collapsed,
+            };
+            match api::save_settings(&base, "", &payload).await {
+                Ok(()) => {
                     state.history_error.set(None);
                 }
                 Err(err) => {
