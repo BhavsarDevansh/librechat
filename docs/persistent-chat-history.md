@@ -23,6 +23,16 @@ Chat history is stored in SQLite via the existing SQLx pool. The feature spans t
 
 Returns conversation summaries ordered by `updated_at DESC`.
 
+**Query parameters**
+
+| Parameter | Type    | Required | Default | Maximum | Description                                    |
+|-----------|---------|----------|---------|---------|------------------------------------------------|
+| `limit`   | integer | No       | 100     | 1000    | Maximum rows to return (clamped to 1–1000).    |
+| `offset`  | integer | No       | 0       | —       | Number of rows to skip (must be non-negative). |
+
+Paging preserves the `updated_at DESC, id DESC` sort order. Pass `offset`
+to page through older conversations.
+
 **Response `200 OK`**
 
 ```json
@@ -36,6 +46,18 @@ Returns conversation summaries ordered by `updated_at DESC`.
     "updated_at": "2026-05-15 10:05:00"
   }
 ]
+```
+
+**Response `400 Bad Request`** — `limit` or `offset` is negative.
+
+```json
+{ "error": "Limit must be non-negative" }
+```
+
+**Response `503 Service Unavailable`** — history storage is not available.
+
+```json
+{ "error": "Database not available" }
 ```
 
 ### `POST /api/conversations`
@@ -65,6 +87,18 @@ Creates a new conversation.
 }
 ```
 
+**Response `400 Bad Request`** — title exceeds the maximum length.
+
+```json
+{ "error": "Title exceeds 256 characters" }
+```
+
+**Response `503 Service Unavailable`** — history storage is not available.
+
+```json
+{ "error": "Database not available" }
+```
+
 ### `GET /api/conversations/{id}`
 
 Fetches a single conversation with ordered messages.
@@ -85,7 +119,19 @@ Fetches a single conversation with ordered messages.
 }
 ```
 
+**Response `400 Bad Request`** — invalid conversation id.
+
+```json
+{ "error": "Invalid conversation id" }
+```
+
 **Response `404 Not Found`**
+
+**Response `503 Service Unavailable`** — history storage is not available.
+
+```json
+{ "error": "Database not available" }
+```
 
 ### `PATCH /api/conversations/{id}`
 
@@ -99,7 +145,19 @@ Updates metadata (any field optional).
 
 **Response `200 OK`** — returns updated conversation summary.
 
+**Response `400 Bad Request`** — title exceeds the maximum length.
+
+```json
+{ "error": "Title exceeds 256 characters" }
+```
+
 **Response `404 Not Found`**
+
+**Response `503 Service Unavailable`** — history storage is not available.
+
+```json
+{ "error": "Database not available" }
+```
 
 ### `POST /api/conversations/{id}/messages`
 
@@ -123,7 +181,19 @@ Appends one or more messages.
 ]
 ```
 
+**Response `400 Bad Request`** — empty batch, batch too large, invalid role, invalid sequence, or message content too long.
+
+```json
+{ "error": "Batch must contain at least one message" }
+```
+
 **Response `404 Not Found`** — conversation does not exist.
+
+**Response `503 Service Unavailable`** — history storage is not available.
+
+```json
+{ "error": "Database not available" }
+```
 
 ### `DELETE /api/conversations/{id}`
 
@@ -131,7 +201,19 @@ Deletes a conversation and cascades to its messages.
 
 **Response `200 OK`**
 
+**Response `400 Bad Request`** — invalid conversation id.
+
+```json
+{ "error": "Invalid conversation id" }
+```
+
 **Response `404 Not Found`**
+
+**Response `503 Service Unavailable`** — history storage is not available.
+
+```json
+{ "error": "Database not available" }
+```
 
 ## Configuration
 

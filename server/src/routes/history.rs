@@ -126,6 +126,21 @@ pub async fn list_conversations_handler(
     let limit = query.limit.unwrap_or(100);
     let offset = query.offset.unwrap_or(0);
 
+    if limit < 0 {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Limit must be non-negative".to_string(),
+        )
+        .into_response();
+    }
+    if offset < 0 {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Offset must be non-negative".to_string(),
+        )
+        .into_response();
+    }
+
     match list_conversations(pool, limit, offset).await {
         Ok(rows) => (StatusCode::OK, Json(rows)).into_response(),
         Err(e) => {
@@ -324,24 +339,12 @@ pub async fn append_messages_handler(
         None => return service_unavailable_error().into_response(),
     };
 
-    // Verify the conversation exists.
-    match get_conversation(pool, id).await {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                format!("Conversation {id} not found"),
-            )
-            .into_response();
-        }
-        Err(e) => {
-            error!(error = %e, conversation_id = id, "failed to verify conversation");
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to verify conversation".to_string(),
-            )
-            .into_response();
-        }
+    if payload.messages.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Batch must contain at least one message".to_string(),
+        )
+        .into_response();
     }
 
     if payload.messages.len() > MAX_BATCH_MESSAGES {
@@ -428,6 +431,15 @@ pub async fn append_messages_handler(
         }
         Err(e) => {
             error!(error = %e, conversation_id = id, "failed to insert messages");
+            if let sqlx::Error::Database(db_err) = &e {
+                if db_err.message().contains("FOREIGN KEY") {
+                    return error_response(
+                        StatusCode::NOT_FOUND,
+                        format!("Conversation {id} not found"),
+                    )
+                    .into_response();
+                }
+            }
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to insert messages".to_string(),

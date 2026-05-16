@@ -416,7 +416,6 @@ impl AppState {
         });
     }
 
-    /// Persist any messages in the active thread that have not yet been saved.
     #[allow(dead_code)]
     /// Update the title of a thread on the backend.
     pub fn update_thread_title(&self, thread_id: ThreadId, title: String) {
